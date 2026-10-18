@@ -40,6 +40,16 @@ function readJsonl(file) {
         .map(l => { const c = JSON.parse(l); c.__line = l; return c; });
 }
 
+// line by line: a run can exceed the maximum string length of V8
+function writeJsonl(file, records) {
+    const fd = fs.openSync(file, 'w');
+    try {
+        for (const r of records) fs.writeSync(fd, stringify(r) + '\n');
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
 function jvmCommand(a) {
     if (a.jvmCmd) { const p = a.jvmCmd.split(' '); return { cmd: p[0], args: p.slice(1) }; }
     const cp = [path.join(ROOT, 'jvm', 'target', 'classes')];
@@ -62,7 +72,7 @@ async function runEngine(name, cmd, args, cases, a, file) {
         env: { JAVA_TOOL_OPTIONS: '' },
         onResult: () => { n++; if (!a.quiet && n % 2000 === 0) process.stderr.write(name + ': ' + n + '/' + cases.length + '\n'); },
     });
-    fs.writeFileSync(file, results.map(r => stringify(r)).join('\n') + '\n');
+    writeJsonl(file, results);
     if (!a.quiet) process.stderr.write(name + ': done ' + cases.length + ' cases in ' + (Date.now() - t0) + ' ms, restarts=' + restarts + '\n');
     return results;
 }
@@ -104,7 +114,7 @@ async function main() {
             if (cmp.category === 'MATCH') byTag[t].match++;
         }
     }
-    fs.writeFileSync(path.join(a.out, 'diff.jsonl'), diffs.map(d => stringify(d)).join('\n') + '\n');
+    writeJsonl(path.join(a.out, 'diff.jsonl'), diffs);
     const summary = { cases: cases.length, categories: byCat, tags: byTag, expected: expectedStats,
         js: js[0] && js[0].engine, jvm: jvm[0] && jvm[0].engine };
     fs.writeFileSync(path.join(a.out, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');

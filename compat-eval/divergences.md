@@ -22,14 +22,14 @@
 |---|---|---|---|---|---|---|
 | [API-01](#api-01) | api | high | исправить движок | S | см. evidence | Общее окружение между вызовами evaluate без Frame: `:=` на верхнем уровне и `$$` утекают, параллельные вызовы … |
 | [API-02](#api-02) | api | medium | исправить движок | M | см. evidence | Лямбды можно вызвать из хоста только в потоке вычисления (Functions.funcApply опирается на ThreadLocal) |
-| [API-03](#api-03) | api | medium | исправить движок | S | воспроизводится 2/2 | Функции хоста: частичное применение `$f(?, x)` и передача функции без сигнатуры в HOF |
+| [API-03](#api-03) | api | medium | исправить движок | S | воспроизводится 1/2 | Функции хоста: частичное применение `$f(?, x)` и передача функции без сигнатуры в HOF |
 | [API-04](#api-04) | api | medium | исправить движок | S | воспроизводится 4/4 | Guardrails (опции jsonata 2.2): NPE при `timeout`/`stack` без `sequence`; `$append` и `*` не проверяют `sequen… |
 | [API-05](#api-05) | api | medium | исправить движок | S | воспроизводится 1/1 | `Frame.setRuntimeBounds`: ошибка без кода U1001 (код = текст сообщения), время отсчитывается от создания Frame… |
 | [API-06](#api-06) | api | low | решение за вами (см. «Вопросы») | M | см. evidence | Модель значений на границе с хостом: JSON null приходит в функции хоста как `Jsonata.NULL_VALUE`, вернуть null… |
-| [UND-01](#und-01) | null | high | исправить движок | M | воспроизводится 7/7 | JSON null, переданный аргументом функции, превращается в undefined |
-| [UND-02](#und-02) | null | medium | исправить движок | S | воспроизводится 4/4 | Проверка сигнатур пропускает null для параметров `s`, `n`, `o`…: вместо T0410 — исключение Java или undefined … |
-| [NUM-01](#num-01) | number | high | исправить движок | S | воспроизводится 4/4 | Глубокое сравнение (`=`, `!=`, `in`, `$distinct`) массивов и объектов зависит от Java-типа числа (Long/Integer… |
-| [NUM-02](#num-02) | number | medium | исправить движок | S | воспроизводится 3/3 | Строковое представление чисел ≥1e20 и с >15 значащими цифрами (`$string`, `&`): JVM даёт экспоненту там, где J… |
+| [UND-01](#und-01) | null | high | исправить движок | M | устранено | JSON null, переданный аргументом функции, превращается в undefined |
+| [UND-02](#und-02) | null | medium | исправить движок | S | устранено | Проверка сигнатур пропускает null для параметров `s`, `n`, `o`…: вместо T0410 — исключение Java или undefined … |
+| [NUM-01](#num-01) | number | high | исправить движок | S | устранено | Глубокое сравнение (`=`, `!=`, `in`, `$distinct`) массивов и объектов зависит от Java-типа числа (Long/Integer… |
+| [NUM-02](#num-02) | number | medium | исправить движок | S | устранено | Строковое представление чисел ≥1e20 и с >15 значащими цифрами (`$string`, `&`): JVM даёт экспоненту там, где J… |
 | [NUM-03](#num-03) | number | medium | исправить движок | M | воспроизводится 7/7 | `$formatNumber` реализован через java.text.DecimalFormat: другие результаты для `#.#`, округления, экспоненты,… |
 | [NUM-04](#num-04) | number | medium | исправить движок | M | воспроизводится 7/7 | `$formatInteger`/`$parseInteger`: переполнение long (слова для >9.2e18), цифры других систем, разбор `i`/`I` (… |
 | [NUM-05](#num-05) | number | low | исправить движок | S | воспроизводится 4/4 | `$number`: принимает `"+5"`, `"1."`; ошибки — NumberFormatException или D1001 вместо D3030 |
@@ -39,26 +39,26 @@
 | [NUM-09](#num-09) | number | low | согласованное исключение | S | воспроизводится 3/3 | Отрицательный ноль: JS сохраняет -0 (`-0`, `0*-1`, `$floor(-0)`…), JVM даёт 0 |
 | [NUM-10](#num-10) | number | low | согласованное исключение | S | воспроизводится 3/3 | Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D… |
 | [NUM-11](#num-11) | number | low | согласованное исключение | S | воспроизводится 1/1 | Последние биты `$power`/`$sqrt` (разные libm V8 и Java) |
-| [STR-01](#str-01) | string | medium | исправить движок | S | воспроизводится 3/3 | `$substring` считает в UTF-16 (режет суррогатные пары; при отрицательном start — исключение), в JS — по кодовы… |
-| [STR-02](#str-02) | string | medium | исправить движок | S | воспроизводится 4/4 | URL-функции: `$encodeUrl` не кодирует пробел, `$decodeUrl*` превращает `+` в пробел, ошибки — исключения Java … |
+| [STR-01](#str-01) | string | medium | исправить движок | S | устранено | `$substring` считает в UTF-16 (режет суррогатные пары; при отрицательном start — исключение), в JS — по кодовы… |
+| [STR-02](#str-02) | string | medium | исправить движок | S | устранено | URL-функции: `$encodeUrl` не кодирует пробел, `$decodeUrl*` превращает `+` в пробел, ошибки — исключения Java … |
 | [STR-03](#str-03) | string | low | решение за вами (см. «Вопросы») | S | воспроизводится 3/3 | `$base64encode/decode`: JS (Node) кодирует строку как latin1 (обрезая символы >255), JVM — как UTF-8; некоррек… |
-| [STR-04](#str-04) | string | low | исправить движок | S | воспроизводится 2/2 | `$string(x, true)`: пустой объект печатается как `{\n  }`; U+2028/U+2029 экранируются |
-| [RE-01](#re-01) | regex | medium | исправить движок | M | воспроизводится 5/5 | Синтаксис regex: JVM передаёт шаблон в java.util.regex как есть: JS-синтаксис `[^]`, `[\b]`, `\0` падает, Java… |
-| [RE-02](#re-02) | regex | medium | исправить движок | M | воспроизводится 5/5 | Семантика regex: `\s` (в JS включает NBSP, U+2028, BOM…), `$` перед финальным `\n`, регистронезависимость для … |
-| [RE-03](#re-03) | regex | medium | исправить движок | S | воспроизводится 5/5 | Совпадение нулевой длины: JS бросает D1004 в `$match`/`$replace`/`$split`, JVM возвращает результат (иногда с … |
-| [RE-04](#re-04) | regex | medium | исправить движок | M | воспроизводится 3/3 | Объект совпадения при `str ~> /re/` и regex как функция: `groups` содержит всё совпадение, другой порядок ключ… |
-| [RE-05](#re-05) | regex | medium | исправить движок | S | воспроизводится 1/1 | `$match(str, re, limit)`: limit игнорируется |
-| [RE-06](#re-06) | regex | medium | исправить движок | S | воспроизводится 5/5 | `$replace`: `$$` в строке замены — исключение; функция замены, вернувшая не строку, — NPE/ClassCast вместо D30… |
+| [STR-04](#str-04) | string | low | исправить движок | S | устранено | `$string(x, true)`: пустой объект печатается как `{\n  }`; U+2028/U+2029 экранируются |
+| [RE-01](#re-01) | regex | medium | исправить движок | M | воспроизводится 2/5 | Синтаксис regex: JVM передаёт шаблон в java.util.regex как есть: JS-синтаксис `[^]`, `[\b]`, `\0` падает, Java… |
+| [RE-02](#re-02) | regex | medium | исправить движок | M | воспроизводится 2/5 | Семантика regex: `\s` (в JS включает NBSP, U+2028, BOM…), `$` перед финальным `\n`, регистронезависимость для … |
+| [RE-03](#re-03) | regex | medium | исправить движок | S | устранено | Совпадение нулевой длины: JS бросает D1004 в `$match`/`$replace`/`$split`, JVM возвращает результат (иногда с … |
+| [RE-04](#re-04) | regex | medium | исправить движок | M | устранено | Объект совпадения при `str ~> /re/` и regex как функция: `groups` содержит всё совпадение, другой порядок ключ… |
+| [RE-05](#re-05) | regex | medium | исправить движок | S | устранено | `$match(str, re, limit)`: limit игнорируется |
+| [RE-06](#re-06) | regex | medium | исправить движок | S | воспроизводится 1/5 | `$replace`: `$$` в строке замены — исключение; функция замены, вернувшая не строку, — NPE/ClassCast вместо D30… |
 | [DT-01](#dt-01) | date | medium | исправить движок | M | воспроизводится 4/4 | `$toMillis(str)` без шаблона разбирает через java.time: принимает `20180201`, отвергает `2018-02`, `2018-02-30… |
 | [DT-02](#dt-02) | date | medium | исправить движок | M | воспроизводится 4/4 | `$toMillis(str, picture)`: фиксированная ширина полей (не перенесён 2dd49c6), `[f]` меньше 3 цифр падает, ошиб… |
 | [DT-03](#dt-03) | date | medium | исправить движок | S | воспроизводится 2/2 | `$fromMillis`: `[X]` (ISO-год недели) выводится как `[Y]`, `[w]`/`[x]` (неделя месяца) считаются иначе |
 | [DT-04](#dt-04) | date | low | исправить движок | S | воспроизводится 3/3 | `$fromMillis`: ошибки шаблона (D3133–D3135) — исключения Java; часовой пояс не в формате ±HHMM (`Z`, `EST`, `+… |
 | [DT-05](#dt-05) | date | low | согласованное исключение | S | воспроизводится 1/1 | Отрицательный часовой пояс с минутами (`-0530`): JS сдвигает на час больше (-06:30), это ошибка JS; JVM считае… |
 | [ORD-01](#ord-01) | order | medium | решение за вами (см. «Вопросы») | M | воспроизводится 5/5 | Порядок ключей вида целого числа (`"1"`, `"10"`): объекты JS ставят их первыми по возрастанию (и во входном JS… |
-| [SORT-01](#sort-01) | sort | high | исправить движок | S | воспроизводится 4/4 | `$sort` по умолчанию падает с ClassCastException на смеси Integer/Double (`[2, 0.5]`) и вместо D3070 на объект… |
-| [SORT-02](#sort-02) | sort | medium | исправить движок | S | воспроизводится 2/2 | `$sort` с компаратором, возвращающим true на равных (`>=`, константа): другой порядок, чем у merge sort из JS |
-| [SORT-03](#sort-03) | sort | low | исправить движок | S | воспроизводится 1/1 | Сортировка на несравнимых значениях: код (T2007 смесь типов / T2008 не число и не строка) зависит от того, как… |
-| [SEQ-01](#seq-01) | sequence | low | исправить движок | S | воспроизводится 1/1 | `$distinct` от массива с одним уникальным значением возвращает скаляр вместо массива |
+| [SORT-01](#sort-01) | sort | high | исправить движок | S | устранено | `$sort` по умолчанию падает с ClassCastException на смеси Integer/Double (`[2, 0.5]`) и вместо D3070 на объект… |
+| [SORT-02](#sort-02) | sort | medium | исправить движок | S | устранено | `$sort` с компаратором, возвращающим true на равных (`>=`, константа): другой порядок, чем у merge sort из JS |
+| [SORT-03](#sort-03) | sort | low | исправить движок | S | устранено | Сортировка на несравнимых значениях: код (T2007 смесь типов / T2008 не число и не строка) зависит от того, как… |
+| [SEQ-01](#seq-01) | sequence | low | исправить движок | S | устранено | `$distinct` от массива с одним уникальным значением возвращает скаляр вместо массива |
 | [ERR-01](#err-01) | error | low | исправить движок | M | воспроизводится 4/4 | Нет позиции (0 или пусто) у ошибок времени выполнения T1003, T1006, T2001–T2004, T2009, T2010, D1002, D1009, T… |
 | [ERR-02](#err-02) | error | low | исправить движок | S | воспроизводится 3/3 | Другой код ошибки: `$number("10e500")` D1001 вместо D3030, `$string(1/0)` D1001 вместо D3001, частичное примен… |
 | [ERR-03](#err-03) | error | low | решение за вами (см. «Вопросы») | S | воспроизводится 2/2 | Структура ошибки: у JException нет раздельных `token`/`value` (одно поле `current`), сообщения отличаются кавы… |
@@ -89,13 +89,13 @@
 
 **Функции хоста: частичное применение `$f(?, x)` и передача функции без сигнатуры в HOF**
 
-Категория: api; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 2/2.
+Категория: api; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/2.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
 | `$ap($ap(?, 'x'), function($s){$s & $s})` | host: ap | "xx" | error T1006@0 | JVM_ERROR |
-| `$map(['a','b'], $hecho)` | host: hecho | ["a","b"] | crash java.lang.NullPointerException: java.lang.NullPointerException: Cannot invoke "com.dashjoin.jsonata.utils.Signature.getMinNumberOfArgs | JVM_CRASH |
+| `$map(['a','b'], $hecho)` | host: hecho | ["a","b"] | ["a","b"] | MATCH |
 
 ### API-04
 
@@ -135,59 +135,59 @@
 
 **JSON null, переданный аргументом функции, превращается в undefined**
 
-Категория: null; серьёзность: high; решение: **исправить движок**; сложность: M; статус: воспроизводится 7/7.
+Категория: null; серьёзность: high; решение: **исправить движок**; сложность: M; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$count(null)` |  | 1 | 0 | NUMBER |
-| `$count(owner)` | {"owner":null} | 1 | 0 | NUMBER |
-| `$map(null, function($v){$type($v)})` |  | "null" | undefined | VALUE |
-| `$sort(null)` |  | [null] | undefined | UNDEF_NULL |
-| `$reduce(null, function($a,$b){$a})` |  | null | undefined | UNDEF_NULL |
-| `$zip(null)` |  | [[null]] | [] | VALUE |
-| `$max(null)` |  | error T0412@5 | undefined | JVM_NO_ERROR |
+| `$count(null)` |  | 1 | 1 | MATCH |
+| `$count(owner)` | {"owner":null} | 1 | 1 | MATCH |
+| `$map(null, function($v){$type($v)})` |  | "null" | "null" | MATCH |
+| `$sort(null)` |  | [null] | [null] | MATCH |
+| `$reduce(null, function($a,$b){$a})` |  | null | null | MATCH |
+| `$zip(null)` |  | [[null]] | [[null]] | MATCH |
+| `$max(null)` |  | error T0412@5 | error T0412@5 | ERROR_TOKEN |
 
 ### UND-02
 
 **Проверка сигнатур пропускает null для параметров `s`, `n`, `o`…: вместо T0410 — исключение Java или undefined (в т.ч. для функций хоста с сигнатурой)**
 
-Категория: null; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 4/4.
+Категория: null; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$uppercase(null)` |  | error T0410@11 | crash java.lang.Exception: java.lang.Exception: Argument error calling function uppercase | JVM_CRASH |
-| `$length(a)` | {"a":null} | error T0410@8 | crash java.lang.Exception: java.lang.Exception: Argument error calling function length | JVM_CRASH |
-| `$hu(null)` | host: hu<s:s> | error T0410@4 | undefined | JVM_NO_ERROR |
-| `$sift(null, function($v){true})` |  | error T0410@6 | crash java.lang.Exception: java.lang.Exception: Argument error calling function sift | JVM_CRASH |
+| `$uppercase(null)` |  | error T0410@11 | error T0410@11 | ERROR_TOKEN |
+| `$length(a)` | {"a":null} | error T0410@8 | error T0410@8 | ERROR_TOKEN |
+| `$hu(null)` | host: hu<s:s> | error T0410@4 | error T0410@4 | ERROR_TOKEN |
+| `$sift(null, function($v){true})` |  | error T0410@6 | error T0410@6 | ERROR_TOKEN |
 
 ### NUM-01
 
 **Глубокое сравнение (`=`, `!=`, `in`, `$distinct`) массивов и объектов зависит от Java-типа числа (Long/Integer/Double)**
 
-Категория: number; серьёзность: high; решение: **исправить движок**; сложность: S; статус: воспроизводится 4/4.
+Категория: number; серьёзность: high; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `a = [1,2]` | {"a":[1,2]} | true | false | VALUE |
-| `o = {'x': 1}` | {"o":{"x":1}} | true | false | VALUE |
-| `a != [1.5,2]` | {"a":[1.5,2]} | false | true | VALUE |
-| `$distinct([1, 1.0, n])` | {"n":1} | [1] | [1,1] | VALUE |
+| `a = [1,2]` | {"a":[1,2]} | true | true | MATCH |
+| `o = {'x': 1}` | {"o":{"x":1}} | true | true | MATCH |
+| `a != [1.5,2]` | {"a":[1.5,2]} | false | false | MATCH |
+| `$distinct([1, 1.0, n])` | {"n":1} | [1] | [1] | MATCH |
 
 ### NUM-02
 
 **Строковое представление чисел ≥1e20 и с >15 значащими цифрами (`$string`, `&`): JVM даёт экспоненту там, где JS пишет целое**
 
-Категория: number; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 3/3.
+Категория: number; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$string(1e20)` |  | "100000000000000000000" | "1e+20" | VALUE |
-| `12345678901234567890 & ''` |  | "12345678901234567000" | "1.23456789012346e+19" | VALUE |
-| `$string($power(2, 64))` |  | "18446744073709552000" | "1.84467440737096e+19" | VALUE |
+| `$string(1e20)` |  | "100000000000000000000" | "100000000000000000000" | MATCH |
+| `12345678901234567890 & ''` |  | "12345678901234567000" | "12345678901234567000" | MATCH |
+| `$string($power(2, 64))` |  | "18446744073709552000" | "18446744073709552000" | MATCH |
 
 ### NUM-03
 
@@ -313,28 +313,28 @@
 
 **`$substring` считает в UTF-16 (режет суррогатные пары; при отрицательном start — исключение), в JS — по кодовым точкам**
 
-Категория: string; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 3/3.
+Категория: string; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$substring('a😀b😀c', 1, 3)` |  | "😀b😀" | "😀b\ud83d" | VALUE |
-| `$substring('a😀b😀c', -2)` |  | "😀c" | crash java.lang.IndexOutOfBoundsException: java.lang.IndexOutOfBoundsException | JVM_CRASH |
-| `$substring('😀', -3)` |  | "😀" | crash java.lang.IndexOutOfBoundsException: java.lang.IndexOutOfBoundsException | JVM_CRASH |
+| `$substring('a😀b😀c', 1, 3)` |  | "😀b😀" | "😀b😀" | MATCH |
+| `$substring('a😀b😀c', -2)` |  | "😀c" | "😀c" | MATCH |
+| `$substring('😀', -3)` |  | "😀" | "😀" | MATCH |
 
 ### STR-02
 
 **URL-функции: `$encodeUrl` не кодирует пробел, `$decodeUrl*` превращает `+` в пробел, ошибки — исключения Java или код «Malformed URL» вместо D3140**
 
-Категория: string; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 4/4.
+Категория: string; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$encodeUrl('a b')` |  | "a%20b" | "a+b" | VALUE |
-| `$decodeUrlComponent('a+b')` |  | "a+b" | "a b" | VALUE |
-| `$decodeUrl('%')` |  | error D3140@11 | crash java.lang.IllegalArgumentException: java.lang.IllegalArgumentException: URLDecoder: Incomplete trailing escape (%) pattern | JVM_CRASH |
-| `$encodeUrlComponent('\ud800')` |  | error D3140@20 | error Malformed URL@0 | ERROR_CODE |
+| `$encodeUrl('a b')` |  | "a%20b" | "a%20b" | MATCH |
+| `$decodeUrlComponent('a+b')` |  | "a+b" | "a+b" | MATCH |
+| `$decodeUrl('%')` |  | error D3140@11 | error D3140@11 | MATCH |
+| `$encodeUrlComponent('\ud800')` |  | error D3140@20 | error D3140@20 | MATCH |
 
 ### STR-03
 
@@ -354,41 +354,41 @@
 
 **`$string(x, true)`: пустой объект печатается как `{\n  }`; U+2028/U+2029 экранируются**
 
-Категория: string; серьёзность: low; решение: **исправить движок**; сложность: S; статус: воспроизводится 2/2.
+Категория: string; серьёзность: low; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$string({'a':{}}, true)` |  | "{\n  \"a\": {}\n}" | "{\n  \"a\": {\n  }\n}" | VALUE |
-| `$string(['x\u2028y'])` |  | "[\"x y\"]" | "[\"x\\u2028y\"]" | VALUE |
+| `$string({'a':{}}, true)` |  | "{\n  \"a\": {}\n}" | "{\n  \"a\": {}\n}" | MATCH |
+| `$string(['x\u2028y'])` |  | "[\"x y\"]" | "[\"x y\"]" | MATCH |
 
 ### RE-01
 
 **Синтаксис regex: JVM передаёт шаблон в java.util.regex как есть: JS-синтаксис `[^]`, `[\b]`, `\0` падает, Java-only `a++`, `(?i)`, `\Z`, `\h`, `\R` принимается (в JS — SyntaxError)**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 5/5.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 2/5.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$replace('ab', /[^]/, 'x')` |  | "xx" | crash java.util.regex.PatternSyntaxException: java.util.regex.PatternSyntaxException: Unclosed character class near index 2\n[^]\n  ^ | JVM_CRASH |
-| `$contains('a', /\0/)` |  | false | crash java.util.regex.PatternSyntaxException: java.util.regex.PatternSyntaxException: Illegal octal escape sequence near index 2\n\0 | JVM_CRASH |
-| `$match('a\bb', /[\b]/)` |  | {"match":"\b","index":1,"groups":[]} | crash java.util.regex.PatternSyntaxException: java.util.regex.PatternSyntaxException: Illegal/unsupported escape sequence near index 2\n[\b] | JVM_CRASH |
-| `$contains('aa', /a++/)` |  | crash SyntaxError: Invalid regular expression: /a++/g: Nothing to repeat | true | JS_CRASH |
-| `$contains('ABC', /(?i)abc/)` |  | crash SyntaxError: Invalid regular expression: /(?i)abc/g: Invalid group | true | JS_CRASH |
+| `$replace('ab', /[^]/, 'x')` |  | "xx" | "xx" | MATCH |
+| `$contains('a', /\0/)` |  | false | false | MATCH |
+| `$match('a\bb', /[\b]/)` |  | {"match":"\b","index":1,"groups":[]} | {"match":"\b","index":1,"groups":[]} | MATCH |
+| `$contains('aa', /a++/)` |  | crash SyntaxError: Invalid regular expression: /a++/g: Nothing to repeat | crash java.util.regex.PatternSyntaxException: java.util.regex.PatternSyntaxException: Nothing to repeat near index 2\na++\n  ^ | CRASH_BOTH |
+| `$contains('ABC', /(?i)abc/)` |  | crash SyntaxError: Invalid regular expression: /(?i)abc/g: Invalid group | crash java.util.regex.PatternSyntaxException: java.util.regex.PatternSyntaxException: Invalid group near index 0\n(?i)abc\n^ | CRASH_BOTH |
 
 ### RE-02
 
 **Семантика regex: `\s` (в JS включает NBSP, U+2028, BOM…), `$` перед финальным `\n`, регистронезависимость для не-ASCII, `.`/классы на суррогатных парах**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 5/5.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 2/5.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$replace('a\u00a0b', /\s/, '_')` |  | "a_b" | "a b" | VALUE |
-| `$contains('abc\n', /c$/)` |  | false | true | VALUE |
-| `$contains('é', /É/i)` |  | true | false | VALUE |
+| `$replace('a\u00a0b', /\s/, '_')` |  | "a_b" | "a_b" | MATCH |
+| `$contains('abc\n', /c$/)` |  | false | false | MATCH |
+| `$contains('é', /É/i)` |  | true | true | MATCH |
 | `$match('a😀b', /./).match` |  | ["a","\ud83d","\ude00","b"] | ["a","😀","b"] | VALUE |
 | `$replace('😀', /[😀]/, 'x')` |  | "xx" | "x" | VALUE |
 
@@ -396,54 +396,54 @@
 
 **Совпадение нулевой длины: JS бросает D1004 в `$match`/`$replace`/`$split`, JVM возвращает результат (иногда с лишними пустыми элементами)**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 5/5.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$match('ab', /x*/)` |  | error D1004@7 | [{"match":"","index":0,"groups":[]},{"match":"","index":1,"groups":[]},{"match":"","index":2,"groups":[]}] | JVM_NO_ERROR |
-| `$replace('abracadabra', /.*?/, '$1')` |  | error D1004@9 | "abracadabra" | JVM_NO_ERROR |
-| `$split('ab', /x*/)` |  | error D1004@7 | ["a","b",""] | JVM_NO_ERROR |
-| `$split('42', /.*/)` |  | ["",""] | ["","",""] | VALUE |
-| `$match('aaa', /.*/)` |  | {"match":"aaa","index":0,"groups":[]} | [{"match":"aaa","index":0,"groups":[]},{"match":"","index":3,"groups":[]}] | VALUE |
+| `$match('ab', /x*/)` |  | error D1004@7 | error D1004@7 | ERROR_TOKEN |
+| `$replace('abracadabra', /.*?/, '$1')` |  | error D1004@9 | error D1004@9 | ERROR_TOKEN |
+| `$split('ab', /x*/)` |  | error D1004@7 | error D1004@7 | ERROR_TOKEN |
+| `$split('42', /.*/)` |  | ["",""] | ["",""] | MATCH |
+| `$match('aaa', /.*/)` |  | {"match":"aaa","index":0,"groups":[]} | {"match":"aaa","index":0,"groups":[]} | MATCH |
 
 ### RE-04
 
 **Объект совпадения при `str ~> /re/` и regex как функция: `groups` содержит всё совпадение, другой порядок ключей; `$map(arr, /re/)` падает; функции-матчеры не поддерживаются**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 3/3.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `'abc' ~> /b/` |  | {"match":"b","start":1,"end":2,"groups":[],"next":<function:native>} | {"end":2,"match":"b","groups":["b"],"next":<function:native>,"start":1} | VALUE |
-| `$map(['a','b'], /a/)` |  | {"match":"a","start":0,"end":1,"groups":[],"next":<function:native>} | crash java.lang.ClassCastException: java.lang.ClassCastException: class java.util.regex.Pattern cannot be cast to class com.dashjoin.jsonata | JVM_CRASH |
-| `$match('aXbX', function($s, $o){ $o = 0 ? {'match':'X','start':1,'end':2,'groups':[], 'next': function(){undefined}} })` |  | undefined | crash java.lang.Exception: java.lang.Exception: Argument error calling function match | JVM_CRASH |
+| `'abc' ~> /b/` |  | {"match":"b","start":1,"end":2,"groups":[],"next":<function:native>} | {"match":"b","start":1,"end":2,"groups":[],"next":<function:native>} | MATCH |
+| `$map(['a','b'], /a/)` |  | {"match":"a","start":0,"end":1,"groups":[],"next":<function:native>} | {"match":"a","start":0,"end":1,"groups":[],"next":<function:native>} | MATCH |
+| `$match('aXbX', function($s, $o){ $o = 0 ? {'match':'X','start':1,'end':2,'groups':[], 'next': function(){undefined}} })` |  | undefined | undefined | MATCH |
 
 ### RE-05
 
 **`$match(str, re, limit)`: limit игнорируется**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/1.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$match('a1b2c3', /\d/, 2).match` |  | ["1","2"] | ["1","2","3"] | VALUE |
+| `$match('a1b2c3', /\d/, 2).match` |  | ["1","2"] | ["1","2"] | MATCH |
 
 ### RE-06
 
 **`$replace`: `$$` в строке замены — исключение; функция замены, вернувшая не строку, — NPE/ClassCast вместо D3012; коды D3010/D3011 — текстом; непойманные группы — null вместо undefined**
 
-Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 5/5.
+Категория: regex; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/5.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$replace('abc', /b/, '$$')` |  | "a$c" | crash java.lang.IllegalArgumentException: java.lang.IllegalArgumentException: Illegal group reference: group index is missing | JVM_CRASH |
-| `$replace('abc', /b/, function($m){42})` |  | error D3012@9 | crash java.lang.NullPointerException: java.lang.NullPointerException: Cannot invoke "String.length()" because "replacement" is null | JVM_CRASH |
-| `$replace('abc', '', 'x')` |  | error D3010@9 | error Second argument of replace function cannot be an empty string@0 | ERROR_CODE |
-| `$replace('abc', 'b', 'x', -1)` |  | error D3011@9 | error Fourth argument of replace function must evaluate to a positive number@0 | ERROR_CODE |
+| `$replace('abc', /b/, '$$')` |  | "a$c" | "a$c" | MATCH |
+| `$replace('abc', /b/, function($m){42})` |  | error D3012@9 | error D3012@9 | ERROR_TOKEN |
+| `$replace('abc', '', 'x')` |  | error D3010@9 | error D3010@9 | ERROR_TOKEN |
+| `$replace('abc', 'b', 'x', -1)` |  | error D3011@9 | error D3011@9 | ERROR_TOKEN |
 | `$match('b', /(a)\|(b)/).groups` |  | [undefined,"b"] | [null,"b"] | UNDEF_NULL |
 
 ### DT-01
@@ -530,49 +530,49 @@
 
 **`$sort` по умолчанию падает с ClassCastException на смеси Integer/Double (`[2, 0.5]`) и вместо D3070 на объектах/смеси типов**
 
-Категория: sort; серьёзность: high; решение: **исправить движок**; сложность: S; статус: воспроизводится 4/4.
+Категория: sort; серьёзность: high; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `[2, 0.5] ~> $sort` |  | [0.5,2] | crash java.lang.ClassCastException: java.lang.ClassCastException: class java.lang.Integer cannot be cast to class java.lang.Double (java.lan | JVM_CRASH |
-| `$sort(n)` | {"n":[3,1.5,2]} | [1.5,2,3] | crash java.lang.ClassCastException: java.lang.ClassCastException: class java.lang.Long cannot be cast to class java.lang.Double (java.lang.L | JVM_CRASH |
-| `$sort([1,'a'])` |  | error D3070@6 | crash java.lang.ClassCastException: java.lang.ClassCastException: class java.lang.Integer cannot be cast to class java.lang.String (java.lan | JVM_CRASH |
-| `$sort([{'a':1},{'a':2}])` |  | error D3070@6 | crash java.lang.ClassCastException: java.lang.ClassCastException: class java.util.LinkedHashMap cannot be cast to class java.lang.Comparable | JVM_CRASH |
+| `[2, 0.5] ~> $sort` |  | [0.5,2] | [0.5,2] | MATCH |
+| `$sort(n)` | {"n":[3,1.5,2]} | [1.5,2,3] | [1.5,2,3] | MATCH |
+| `$sort([1,'a'])` |  | error D3070@6 | error D3070@6 | ERROR_TOKEN |
+| `$sort([{'a':1},{'a':2}])` |  | error D3070@6 | error D3070@6 | ERROR_TOKEN |
 
 ### SORT-02
 
 **`$sort` с компаратором, возвращающим true на равных (`>=`, константа): другой порядок, чем у merge sort из JS**
 
-Категория: sort; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 2/2.
+Категория: sort; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$sort(items, function($l,$r){$l.k >= $r.k}).n` | {"items":[{"k":2,"n":"a"},{"k":1,"n":"b"},{"k":2,"n":"c"},{"k":1,"n":"d"},{"k":3,"n":"e"},{"k":1,"n":"f"}]} | ["f","d","b","c","a","e"] | ["b","d","f","a","c","e"] | VALUE |
-| `$sort([3,1,2], function($l,$r){true})` |  | [2,1,3] | [3,1,2] | NUMBER |
+| `$sort(items, function($l,$r){$l.k >= $r.k}).n` | {"items":[{"k":2,"n":"a"},{"k":1,"n":"b"},{"k":2,"n":"c"},{"k":1,"n":"d"},{"k":3,"n":"e"},{"k":1,"n":"f"}]} | ["f","d","b","c","a","e"] | ["f","d","b","c","a","e"] | MATCH |
+| `$sort([3,1,2], function($l,$r){true})` |  | [2,1,3] | [2,1,3] | MATCH |
 
 ### SORT-03
 
 **Сортировка на несравнимых значениях: код (T2007 смесь типов / T2008 не число и не строка) зависит от того, какая пара сравнивается первой, то есть от алгоритма сортировки (см. SORT-02)**
 
-Категория: sort; серьёзность: low; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/1.
+Категория: sort; серьёзность: low; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `items^(k)` | {"items":[{"k":1},{"k":"9"},{"k":null},{"k":"10"},{"k":2},{"n":"nok"}]} | error T2008@6 | error T2007@6 | ERROR_CODE |
+| `items^(k)` | {"items":[{"k":1},{"k":"9"},{"k":null},{"k":"10"},{"k":2},{"n":"nok"}]} | error T2008@6 | error T2008@6 | ERROR_TOKEN |
 
 ### SEQ-01
 
 **`$distinct` от массива с одним уникальным значением возвращает скаляр вместо массива**
 
-Категория: sequence; серьёзность: low; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/1.
+Категория: sequence; серьёзность: low; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$distinct([1,1])` |  | [1] | 1 | SINGLETON |
+| `$distinct([1,1])` |  | [1] | [1] | MATCH |
 
 ### ERR-01
 
