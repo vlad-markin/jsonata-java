@@ -24,7 +24,7 @@
 | [API-02](#api-02) | api | medium | исправить движок | M | устранено (CompatJs222Test.api02_callLambdaFromOtherThread) | Лямбды можно вызвать из хоста только в потоке вычисления (Functions.funcApply опирается на ThreadLocal) |
 | [API-03](#api-03) | api | medium | исправить движок | S | устранено | Функции хоста: частичное применение `$f(?, x)` и передача функции без сигнатуры в HOF |
 | [API-04](#api-04) | api | medium | исправить движок | S | устранено | Guardrails (опции jsonata 2.2): NPE при `timeout`/`stack` без `sequence`; `$append` и `*` не проверяют `sequen… |
-| [API-05](#api-05) | api | medium | исправить движок | S | устранено | `Frame.setRuntimeBounds`: ошибка без кода U1001 (код = текст сообщения), время отсчитывается от создания Frame… |
+| [API-05](#api-05) | api | medium | исправить движок | S | воспроизводится 1/1 | `Frame.setRuntimeBounds`: ошибка без кода U1001 (код = текст сообщения), время отсчитывается от создания Frame… |
 | [API-06](#api-06) | api | low | решение за вами (см. «Вопросы») | M | см. evidence | Модель значений на границе с хостом: JSON null приходит в функции хоста как `Jsonata.NULL_VALUE`, вернуть null… |
 | [UND-01](#und-01) | null | high | исправить движок | M | устранено | JSON null, переданный аргументом функции, превращается в undefined |
 | [UND-02](#und-02) | null | medium | исправить движок | S | устранено | Проверка сигнатур пропускает null для параметров `s`, `n`, `o`…: вместо T0410 — исключение Java или undefined … |
@@ -37,7 +37,7 @@
 | [NUM-07](#num-07) | number | low | исправить движок | S | устранено | `$sum` суммирует не так, как JS (не простое последовательное сложение double) |
 | [NUM-08](#num-08) | number | low | согласованное исключение | S | см. evidence | Целые > 2^53 во входных данных и привязках: JVM хранит точный long, JS округляет до double |
 | [NUM-09](#num-09) | number | low | согласованное исключение | S | воспроизводится 3/3 | Отрицательный ноль: JS сохраняет -0 (`-0`, `0*-1`, `$floor(-0)`…), JVM даёт 0 |
-| [NUM-10](#num-10) | number | low | согласованное исключение | S | воспроизводится 4/4 | Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D… |
+| [NUM-10](#num-10) | number | low | согласованное исключение | S | устранено | Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D… |
 | [NUM-11](#num-11) | number | low | согласованное исключение | S | воспроизводится 1/1 | Последние биты `$power`/`$sqrt` (разные libm V8 и Java) |
 | [STR-01](#str-01) | string | medium | исправить движок | S | устранено | `$substring` считает в UTF-16 (режет суррогатные пары; при отрицательном start — исключение), в JS — по кодовы… |
 | [STR-02](#str-02) | string | medium | исправить движок | S | устранено | URL-функции: `$encodeUrl` не кодирует пробел, `$decodeUrl*` превращает `+` в пробел, ошибки — исключения Java … |
@@ -49,11 +49,12 @@
 | [RE-04](#re-04) | regex | medium | исправить движок | M | устранено | Объект совпадения при `str ~> /re/` и regex как функция: `groups` содержит всё совпадение, другой порядок ключ… |
 | [RE-05](#re-05) | regex | medium | исправить движок | S | устранено | `$match(str, re, limit)`: limit игнорируется |
 | [RE-06](#re-06) | regex | medium | исправить движок | S | устранено | `$replace`: `$$` в строке замены — исключение; функция замены, вернувшая не строку, — NPE/ClassCast вместо D30… |
-| [DT-01](#dt-01) | date | medium | исправить движок | M | воспроизводится 4/4 | `$toMillis(str)` без шаблона разбирает через java.time: принимает `20180201`, отвергает `2018-02`, `2018-02-30… |
-| [DT-02](#dt-02) | date | medium | исправить движок | M | воспроизводится 4/4 | `$toMillis(str, picture)`: фиксированная ширина полей (не перенесён 2dd49c6), `[f]` меньше 3 цифр падает, ошиб… |
-| [DT-03](#dt-03) | date | medium | исправить движок | S | воспроизводится 2/2 | `$fromMillis`: `[X]` (ISO-год недели) выводится как `[Y]`, `[w]`/`[x]` (неделя месяца) считаются иначе |
-| [DT-04](#dt-04) | date | low | исправить движок | S | воспроизводится 3/3 | `$fromMillis`: ошибки шаблона (D3133–D3135) — исключения Java; часовой пояс не в формате ±HHMM (`Z`, `EST`, `+… |
+| [DT-01](#dt-01) | date | medium | исправить движок | M | устранено | `$toMillis(str)` без шаблона разбирает через java.time: принимает `20180201`, отвергает `2018-02`, `2018-02-30… |
+| [DT-02](#dt-02) | date | medium | исправить движок | M | устранено | `$toMillis(str, picture)`: фиксированная ширина полей (не перенесён 2dd49c6), `[f]` меньше 3 цифр падает, ошиб… |
+| [DT-03](#dt-03) | date | medium | исправить движок | S | устранено | `$fromMillis`: `[X]` (ISO-год недели) выводится как `[Y]`, `[w]`/`[x]` (неделя месяца) считаются иначе |
+| [DT-04](#dt-04) | date | low | исправить движок | S | устранено | `$fromMillis`: ошибки шаблона (D3133–D3135) — исключения Java; часовой пояс не в формате ±HHMM (`Z`, `EST`, `+… |
 | [DT-05](#dt-05) | date | low | согласованное исключение | S | воспроизводится 1/1 | Отрицательный часовой пояс с минутами (`-0530`): JS сдвигает на час больше (-06:30), это ошибка JS; JVM считае… |
+| [DT-06](#dt-06) | date | low | решение за вами (см. «Вопросы») | S | устранено | `$toMillis(str, picture)` с `[Z]`: jsonata-js читает отрицательный пояс с минутами неверно (`-0530` → -04:30).… |
 | [ORD-01](#ord-01) | order | medium | решение за вами (см. «Вопросы») | M | воспроизводится 5/5 | Порядок ключей вида целого числа (`"1"`, `"10"`): объекты JS ставят их первыми по возрастанию (и во входном JS… |
 | [SORT-01](#sort-01) | sort | high | исправить движок | S | устранено | `$sort` по умолчанию падает с ClassCastException на смеси Integer/Double (`[2, 0.5]`) и вместо D3070 на объект… |
 | [SORT-02](#sort-02) | sort | medium | исправить движок | S | устранено | `$sort` с компаратором, возвращающим true на равных (`>=`, константа): другой порядок, чем у merge sort из JS |
@@ -121,13 +122,13 @@
 
 **`Frame.setRuntimeBounds`: ошибка без кода U1001 (код = текст сообщения), время отсчитывается от создания Frame, а не от начала evaluate**
 
-Категория: api; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
+Категория: api; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 1/1.
 
 - Доказательство: ApiProbe API-7; test-suite tail-recursion/case002,005,006
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `($f := function($n){$n=0?0:1+$f($n-1)}; $f(50))` | bounds {"timelimit":1000,"depth":30} | error U1001@32 | error U1001@32 | ERROR_TOKEN |
+| `($f := function($n){$n=0?0:1+$f($n-1)}; $f(50))` | bounds {"timelimit":1000,"depth":30} | error U1001@32 | error U1001@43 | ERROR_POSITION |
 
 ### API-06
 
@@ -296,16 +297,16 @@
 
 **Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D3121**
 
-Категория: number; серьёзность: low; решение: **согласованное исключение**; сложность: S; статус: воспроизводится 4/4.
+Категория: number; серьёзность: low; решение: **согласованное исключение**; сложность: S; статус: устранено.
 
 - Примечание: Результат JS не сериализуется в JSON. Ошибка в JVM полезнее; считать исключением
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `1/0` |  | Infinity | error D1001@2 | JVM_ERROR |
-| `$eval('1/0')` |  | Infinity | error D3121@6 | JVM_ERROR |
-| `5 % 0` |  | NaN | undefined | VALUE |
-| `$string(1/0)` |  | error D3001@8 | error D1001@10 | ERROR_CODE |
+| `1/0` |  | Infinity | Infinity | MATCH |
+| `$eval('1/0')` |  | Infinity | Infinity | MATCH |
+| `5 % 0` |  | NaN | NaN | MATCH |
+| `$string(1/0)` |  | error D3001@8 | error D3001@8 | ERROR_TOKEN |
 
 ### NUM-11
 
@@ -458,54 +459,54 @@
 
 **`$toMillis(str)` без шаблона разбирает через java.time: принимает `20180201`, отвергает `2018-02`, `2018-02-30` даёт 28 февраля вместо 2 марта; ошибка — DateTimeParseException вместо D3110**
 
-Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 4/4.
+Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$toMillis('2018-02')` |  | 1517443200000 | crash java.time.format.DateTimeParseException: java.time.format.DateTimeParseException: Text '2018-02' could not be parsed at index 7 | JVM_CRASH |
-| `$toMillis('20180201')` |  | error D3110@10 | 636763467110400000 | JVM_NO_ERROR |
-| `$toMillis('2018-02-30')` |  | 1519948800000 | 1519776000000 | NUMBER |
-| `$toMillis('foo')` |  | error D3110@10 | crash java.time.format.DateTimeParseException: java.time.format.DateTimeParseException: Text 'foo' could not be parsed at index 0 | JVM_CRASH |
+| `$toMillis('2018-02')` |  | 1517443200000 | 1517443200000 | MATCH |
+| `$toMillis('20180201')` |  | error D3110@10 | error D3110@10 | ERROR_TOKEN |
+| `$toMillis('2018-02-30')` |  | 1519948800000 | 1519948800000 | MATCH |
+| `$toMillis('foo')` |  | error D3110@10 | error D3110@10 | ERROR_TOKEN |
 
 ### DT-02
 
 **`$toMillis(str, picture)`: фиксированная ширина полей (не перенесён 2dd49c6), `[f]` меньше 3 цифр падает, ошибки шаблона — исключения Java вместо D3132–D3136**
 
-Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: воспроизводится 4/4.
+Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: M; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$toMillis('1022024', '[D1][M01][Y0001]')` |  | 1706745600000 | crash java.time.DateTimeException: java.time.DateTimeException: Invalid value for MonthOfYear (valid values 1 - 12): 22 | JVM_CRASH |
-| `$toMillis('2026-04-08T19:05:04.5', '[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f1]')` |  | 1775675104500 | crash java.lang.StringIndexOutOfBoundsException: java.lang.StringIndexOutOfBoundsException: Range [0, 3) out of bounds for length 1 | JVM_CRASH |
-| `$toMillis('2018-05-22', '[Y]-[M]-[q]')` |  | error D3132@10 | crash java.lang.RuntimeException: java.lang.RuntimeException: Unknown component specifier q in date/time picture string | JVM_CRASH |
-| `$toMillis('2018-22', '[Y]-[D]')` |  | error D3136@10 | crash java.lang.RuntimeException: java.lang.RuntimeException: The date/time picture string is missing specifiers required to parse the times | JVM_CRASH |
+| `$toMillis('1022024', '[D1][M01][Y0001]')` |  | 1706745600000 | 1706745600000 | MATCH |
+| `$toMillis('2026-04-08T19:05:04.5', '[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f1]')` |  | 1775675104500 | 1775675104500 | MATCH |
+| `$toMillis('2018-05-22', '[Y]-[M]-[q]')` |  | error D3132@10 | error D3132@10 | ERROR_TOKEN |
+| `$toMillis('2018-22', '[Y]-[D]')` |  | error D3136@10 | error D3136@10 | ERROR_TOKEN |
 
 ### DT-03
 
 **`$fromMillis`: `[X]` (ISO-год недели) выводится как `[Y]`, `[w]`/`[x]` (неделя месяца) считаются иначе**
 
-Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: воспроизводится 2/2.
+Категория: date; серьёзность: medium; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$fromMillis($toMillis('2005-01-01'), '[X0001]-W[W01]-[F1]')` |  | "2004-W53-6" | "2005-W53-6" | VALUE |
-| `$fromMillis(1359720000000, 'Week: [w] of [xNn]')` |  | "Week: 5 of January" | "Week: 0 of February" | VALUE |
+| `$fromMillis($toMillis('2005-01-01'), '[X0001]-W[W01]-[F1]')` |  | "2004-W53-6" | "2004-W53-6" | MATCH |
+| `$fromMillis(1359720000000, 'Week: [w] of [xNn]')` |  | "Week: 5 of January" | "Week: 5 of January" | MATCH |
 
 ### DT-04
 
 **`$fromMillis`: ошибки шаблона (D3133–D3135) — исключения Java; часовой пояс не в формате ±HHMM (`Z`, `EST`, `+01:00`) — NumberFormatException**
 
-Категория: date; серьёзность: low; решение: **исправить движок**; сложность: S; статус: воспроизводится 3/3.
+Категория: date; серьёзность: low; решение: **исправить движок**; сложность: S; статус: устранено.
 
 
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
-| `$fromMillis(0, '[YN]-[M]-[D]')` |  | error D3133@12 | crash java.lang.RuntimeException: java.lang.RuntimeException: The 'name' modifier can only be applied to months and days in the date/time pi | JVM_CRASH |
-| `$fromMillis(0, '[Y]', 'Z')` |  | "NaN" | crash java.lang.NumberFormatException: java.lang.NumberFormatException: For input string: "Z" | JVM_CRASH |
-| `$fromMillis(0, '[H]', '+01:00')` |  | "0" | crash java.lang.NumberFormatException: java.lang.NumberFormatException: For input string: "+01:00" | JVM_CRASH |
+| `$fromMillis(0, '[YN]-[M]-[D]')` |  | error D3133@12 | error D3133@12 | ERROR_TOKEN |
+| `$fromMillis(0, '[Y]', 'Z')` |  | "NaN" | "NaN" | MATCH |
+| `$fromMillis(0, '[H]', '+01:00')` |  | "0" | "0" | MATCH |
 
 ### DT-05
 
@@ -518,6 +519,18 @@
 | пример | вход | JS 2.2.2 | JVM | категория |
 |---|---|---|---|---|
 | `$fromMillis(0, '[H01]:[m01] [Z]', '-0530')` |  | "17:30 -06:30" | "18:30 -05:30" | VALUE |
+
+### DT-06
+
+**`$toMillis(str, picture)` с `[Z]`: jsonata-js читает отрицательный пояс с минутами неверно (`-0530` → -04:30). В JVM сохранено поведение JS, потому что пояс приходит из данных и переписыванием выражения расхождение не закрыть**
+
+Категория: date; серьёзность: low; решение: **решение за вами (см. «Вопросы»)**; сложность: S; статус: устранено.
+
+- Примечание: Сейчас совпадает с JS. Если важнее корректность, это одна строка в DateTimeUtils (см. вопрос в REPORT.md)
+
+| пример | вход | JS 2.2.2 | JVM | категория |
+|---|---|---|---|---|
+| `$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')` |  | 1526985000000 | 1526985000000 | MATCH |
 
 ### ORD-01
 
