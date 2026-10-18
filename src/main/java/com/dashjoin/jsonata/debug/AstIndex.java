@@ -79,8 +79,10 @@ public final class AstIndex {
             }
             case "variable":
                 return "$" + s.getValue();
-            default:
-                return s.getValue();
+            default: {
+                Object v = s.getValue();
+                return v instanceof Character ? v.toString() : v;   // single-char operators are Characters
+            }
         }
     }
 
@@ -102,9 +104,11 @@ public final class AstIndex {
 
     /** innermost node whose range contains the offset (start <= offset < end); null if none */
     public NodeInfo nodeAt(int offset) {
-        NodeInfo best = innermost(offset);
-        if (best == null && offset > 0) best = innermost(offset - 1); // caret right after a token
-        return best;
+        String t = source.text();
+        boolean onSpace = offset >= t.length() || Character.isWhitespace(t.charAt(offset));
+        if (onSpace && offset > 0 && offset - 1 < t.length() && !Character.isWhitespace(t.charAt(offset - 1)))
+            offset--;   // caret right after a token (e.g. at the end of a line)
+        return innermost(offset);
     }
 
     /** innermost node at a 1-based line / column */

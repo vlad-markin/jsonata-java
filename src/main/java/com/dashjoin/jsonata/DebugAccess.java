@@ -114,6 +114,18 @@ public final class DebugAccess {
         }
     }
 
+    /** the value of {@code $} for a node evaluated with the given input (unwraps the outer array wrapper) */
+    public static Object contextValue(Object input) {
+        if (input instanceof Utils.JList && ((Utils.JList<?>) input).outerWrapper) return ((Utils.JList<?>) input).get(0);
+        return input;
+    }
+
+    /** JSONata truthiness (as used by predicates / conditions) */
+    public static boolean truthy(Object v) {
+        Boolean b = Functions.toBoolean(v);
+        return b != null && b;
+    }
+
     /** JSON rendering of a value for display (functions are shown as their kind) */
     public static String render(Object v) {
         if (v == null) return "undefined";
