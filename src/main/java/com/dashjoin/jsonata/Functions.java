@@ -80,7 +80,10 @@ public class Functions {
             return null;
         }
 
-        double total = args.stream().mapToDouble(Number::doubleValue).sum();
+        // plain left-to-right double addition like jsonata-js (DoubleStream.sum compensates errors)
+        double total = 0;
+        for (Number n : args)
+            total += n.doubleValue();
         return total;
     }
 
@@ -145,11 +148,11 @@ public class Functions {
             return null;
         }
 
-        OptionalDouble res = args.stream().mapToDouble(Number::doubleValue).average();
-        if (res.isPresent())
-            return res.getAsDouble();
-        else
-            return null;
+        // plain sum / count like jsonata-js (DoubleStream.average compensates rounding errors)
+        double total = 0;
+        for (Number n : args)
+            total += n.doubleValue();
+        return total / args.size();
     }
 
     /**

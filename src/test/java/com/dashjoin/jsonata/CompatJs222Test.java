@@ -330,4 +330,11 @@ public class CompatJs222Test {
         for (String s : new String[] { "'+5'", "'1.'", "'.5'", "'  42 '", "'Hello'", "''", "'1e400'", "'Infinity'" })
             assertEquals("D3030", err("$number(" + s + ")"), s);
     }
+
+    /** NUM-07: $sum / $average add like JavaScript (no compensated summation). */
+    @Test
+    public void num07_sumAverage() {
+        assertEquals(0.6000000000000001, jsonata("$sum([0.1, 0.2, 0.3])").evaluate(null));
+        assertEquals(0.20000000000000004, jsonata("$average([0.1, 0.2, 0.3])").evaluate(null));
+    }
 }
