@@ -212,7 +212,8 @@ public class Functions {
           b.append(Utils.jsNumberToString(d)); return;
         }
 
-        if ((arg instanceof Long || arg instanceof java.math.BigInteger) && Math.abs(((Number) arg).doubleValue()) > 9007199254740992d) {
+        if ((arg instanceof Long && Math.abs((Long) arg) > 9007199254740992L)
+                || (arg instanceof java.math.BigInteger && ((java.math.BigInteger) arg).abs().bitLength() > 53)) {
             // beyond 2^53 jsonata-js only has the double value: format it like Number#toString
             b.append(Utils.jsNumberToString(((Number) arg).doubleValue())); return;
         }
