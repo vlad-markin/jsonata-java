@@ -64,6 +64,7 @@ import com.dashjoin.jsonata.Utils.JList;
 import com.dashjoin.jsonata.json.Json;
 import com.dashjoin.jsonata.utils.Constants;
 import com.dashjoin.jsonata.utils.DateTimeUtils;
+import com.dashjoin.jsonata.utils.UriCodec;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class Functions {
@@ -992,20 +993,7 @@ public class Functions {
      * @returns {string} Encoded string
      */
     public static String encodeUrlComponent(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        Utils.checkUrl(str);
-        
-        return URLEncoder.encode(str, StandardCharsets.UTF_8)
-                            .replaceAll("\\+", "%20")
-                            .replaceAll("\\%21", "!")
-                            .replaceAll("\\%27", "'")
-                            .replaceAll("\\%28", "(")
-                            .replaceAll("\\%29", ")")
-                            .replaceAll("\\%7E", "~");
+        return uriFunction("encodeUrlComponent", str);
     }
 
     /**
@@ -1014,52 +1002,8 @@ public class Functions {
      * @returns {string} Encoded string
      */
     public static String encodeUrl(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        Utils.checkUrl(str);
-        
-        try {
-          // only encode query part: https://docs.jsonata.org/string-functions#encodeurl
-          URL url = new URL(str);
-          String query = url.getQuery();
-          if (query != null) {
-              int offset = str.indexOf(query);
-              String strResult = str.substring(0, offset);
-              return strResult + encodeURI(query);
-          }
-        } catch (Exception e) {
-          // ignore and return default
-        }
-        return  URLEncoder.encode(str, StandardCharsets.UTF_8);
+        return uriFunction("encodeUrl", str);
     }
-
-    static String encodeURI(String uri) {
-      String result = null;
-      if (uri != null) {
-          try {
-              // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURI
-              // Not encoded: A-Z a-z 0-9 ; , / ? : @ & = + $ - _ . ! ~ * ' ( ) #
-              result = URLEncoder.encode(uri, "UTF-8").replaceAll("\\+", "%20")
-                  .replaceAll("%20", " ").replaceAll("\\%21", "!")
-                  .replaceAll("\\%23", "#").replaceAll("\\%24", "$")
-                  .replaceAll("\\%26", "&").replaceAll("\\%27", "'")
-                  .replaceAll("\\%28", "(").replaceAll("\\%29", ")")
-                  .replaceAll("\\%2A", "*").replaceAll("\\%2B", "+")
-                  .replaceAll("\\%2C", ",").replaceAll("\\%2D", "-")
-                  .replaceAll("\\%2E", ".").replaceAll("\\%2F", "/")
-                  .replaceAll("\\%3A", ":").replaceAll("\\%3B", ";")
-                  .replaceAll("\\%3D", "=").replaceAll("\\%3F", "?")
-                  .replaceAll("\\%40", "@").replaceAll("\\%5F", "_")
-                  .replaceAll("\\%7E", "~");
-          } catch (UnsupportedEncodingException e) {
-              e.printStackTrace();
-          }
-      }
-      return result;
-  }
 
     /**
      * Decode a string from a component for a url
@@ -1067,12 +1011,7 @@ public class Functions {
      * @returns {string} Decoded string
      */
     public static String decodeUrlComponent(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        return URLDecoder.decode(str, StandardCharsets.UTF_8);
+        return uriFunction("decodeUrlComponent", str);
     }
 
     /**
@@ -1081,12 +1020,25 @@ public class Functions {
      * @returns {string} Decoded string
      */
     public static String decodeUrl(String str) {
+        return uriFunction("decodeUrl", str);
+    }
+
+    /** ECMAScript URI functions as in jsonata-js; malformed input raises D3140 */
+    static String uriFunction(String name, String str) {
         // undefined inputs always return undefined
         if (str == null) {
             return null;
         }
-
-        return URLDecoder.decode(str, StandardCharsets.UTF_8);
+        try {
+            switch (name) {
+                case "encodeUrlComponent": return UriCodec.encodeURIComponent(str);
+                case "encodeUrl": return UriCodec.encodeURI(str);
+                case "decodeUrlComponent": return UriCodec.decodeURIComponent(str);
+                default: return UriCodec.decodeURI(str);
+            }
+        } catch (IllegalArgumentException e) {
+            throw new JException("D3140", -1, name, str);
+        }
     }
 
     public static List<String> split(String str, Object pattern, Number limit) {

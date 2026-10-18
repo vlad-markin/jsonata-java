@@ -193,4 +193,17 @@ public class CompatJs222Test {
         assertEquals("bc", jsonata("$substring('abc', 1.5, 1.5)").evaluate(null));
         assertEquals("", jsonata("$substring('abc', 1, 0)").evaluate(null));
     }
+
+    /** STR-02: URL functions follow ECMAScript encodeURI(Component)/decodeURI(Component). */
+    @Test
+    public void str02_urlFunctions() {
+        assertEquals("https://x.y/a%20b?q=%C3%A9#f", jsonata("$encodeUrl('https://x.y/a b?q=\u00e9#f')").evaluate(null));
+        assertEquals("a%20b%26c%3D%F0%9F%98%80", jsonata("$encodeUrlComponent('a b&c=\ud83d\ude00')").evaluate(null));
+        assertEquals("a+b", jsonata("$decodeUrlComponent('a+b')").evaluate(null));
+        assertEquals("a%2Fb ", jsonata("$decodeUrl('a%2Fb%20')").evaluate(null));
+        assertEquals("D3140", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$decodeUrl('%')").evaluate(null)).getError());
+        assertEquals("D3140", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$encodeUrlComponent('\ud800')").evaluate(null)).getError());
+    }
 }
