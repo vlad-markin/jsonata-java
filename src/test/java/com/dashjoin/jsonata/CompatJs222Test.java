@@ -374,4 +374,47 @@ public class CompatJs222Test {
         assertEquals("T1007", err("substring(?, 0, ?)"));
         assertEquals("T1008", err("$nothing(?, 0)"));
     }
+
+    static Object call(Object fn, Object... args) {
+        try {
+            return Functions.funcApply(fn, new ArrayList<>(List.of(args)));
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
+    }
+
+    /** API-02: function values can be called by the host from other threads and after evaluate. */
+    @Test
+    public void api02_callLambdaFromOtherThread() throws Exception {
+        Object fn = jsonata("($k := 2; function($x){$x * $k})").evaluate(null);
+        assertEquals(42, call(fn, 21));
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        try {
+            assertEquals(42, ex.submit(() -> call(fn, 21)).get());
+            Jsonata e = jsonata("$ap(function($x){$x * 2}, 21)");
+            e.registerFunction("ap", new Jsonata.JFunction((input, args) -> ex.submit(() -> call(args.get(0), args.get(1))).get(), null));
+            assertEquals(42, e.evaluate(null));
+        } finally {
+            ex.shutdown();
+        }
+    }
+
+    /** API-07: $now()/$millis() of a cached expression return the time of its own evaluation. */
+    @Test
+    public void api07_evaluationTimePerExpression() throws Exception {
+        Jsonata cached = jsonata("$millis()");
+        Jsonata other = jsonata("1");
+        other.evaluate(null);
+        Thread.sleep(300);
+        long t = ((Number) cached.evaluate(null)).longValue();
+        org.junit.jupiter.api.Assertions.assertTrue(System.currentTimeMillis() - t < 200, "stale $millis()");
+        // a nested evaluation of another expression (from a host function) restores the context
+        Jsonata outer = jsonata("[$millis(), $inner(), $millis()]");
+        Jsonata inner = jsonata("$millis()");
+        outer.registerFunction("inner", (Jsonata.Fn0<Object>) () -> inner.evaluate(null));
+        List<?> r = (List<?>) outer.evaluate(null);
+        assertEquals(r.get(0), r.get(2));
+    }
 }

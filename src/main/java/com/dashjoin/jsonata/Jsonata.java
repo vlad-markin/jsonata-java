@@ -158,10 +158,26 @@ public class Jsonata {
      */
     Object evaluate(Symbol expr, Object input, Frame environment) {
         // Thread safety:
-        // Make sure each evaluate is executed on an instance per thread
-        Jsonata _this = getPerThreadInstance();
-        // Save and restore the evaluation context so that nested
-        // evaluations (e.g. $eval()) see the correct context.        
+        // Make sure each evaluate is executed on an instance per thread (and per expression)
+        Jsonata cur = current.get();
+        if (cur == this) {
+            // fast path: recursive evaluation on the active per-thread instance
+            // Save and restore the evaluation context so that nested
+            // evaluations (e.g. $eval()) see the correct context.
+            Object _input = this.input;
+            Frame _environment = this.environment;
+            try {
+              return this._evaluate(expr, input, environment);
+            } finally {
+                this.input = _input;
+                this.environment = _environment;
+            }
+        }
+        // entering an evaluation of this expression (top level, or nested inside the evaluation
+        // of another expression, e.g. from a host function): activate this expression's
+        // per-thread instance and restore the previous one afterwards
+        Jsonata _this = (cur != null && cur.root == this.root) ? cur : getPerThreadInstance();
+        current.set(_this);
         Object _input = _this.input;
         Frame _environment = _this.environment;
         try {
@@ -169,7 +185,36 @@ public class Jsonata {
         } finally {
             _this.input = _input;
             _this.environment = _environment;
+            if (cur == null)
+                current.remove();
+            else
+                current.set(cur);
         }
+    }
+
+    /**
+     * Runs the given action with an active evaluation context on this thread (used when a host
+     * calls a JSONata function value outside of an evaluation, e.g. from another thread).
+     */
+    static <T> T withContext(java.util.concurrent.Callable<T> action) throws Exception {
+        if (current.get() != null)
+            return action.call();
+        Jsonata ctx = detached().getPerThreadInstance();
+        current.set(ctx);
+        try {
+            return action.call();
+        } finally {
+            current.remove();
+        }
+    }
+
+    private static volatile Jsonata detached;
+
+    static Jsonata detached() {
+        Jsonata d = detached;
+        if (d == null)
+            detached = d = new Jsonata("$", null);
+        return d;
     }
 
     Object _evaluate(Symbol expr, Object input, Frame environment) {
@@ -1626,20 +1671,20 @@ public class Jsonata {
      * @return
      */
     Jsonata getPerThreadInstance() {
-        Jsonata threadInst = current.get();
-        // Fast path
-        if (threadInst!=null)
-            return threadInst;
-
-        synchronized(this) {
-            threadInst = current.get();
-            if (threadInst==null) {
-                threadInst = new Jsonata(this);
-                current.set(threadInst);
-            }
-            return threadInst;
+        // one instance per thread and per compiled expression (root)
+        Jsonata threadInst = root.perThread.get();
+        if (threadInst == null) {
+            threadInst = new Jsonata(root);
+            root.perThread.set(threadInst);
         }
+        return threadInst;
     }
+
+    /** the compiled expression this (per-thread) instance belongs to */
+    final Jsonata root;
+
+    /** per-thread instances of this expression (only used on the root) */
+    final ThreadLocal<Jsonata> perThread;
 
      /**
       * Evaluate Object against input data
@@ -2598,8 +2643,10 @@ public class Jsonata {
         //      jsonata.RegexEngine = RegExp;
         //  }
 
-        // Set instance for this thread
-        current.set(this);
+        // Note: the constructor no longer sets the thread's current instance; evaluate() activates
+        // a per-thread instance of this expression and restores the previous one afterwards
+        root = this;
+        perThread = new ThreadLocal<>();
     }
 
     /**
@@ -2612,6 +2659,9 @@ public class Jsonata {
         this.ast = other.ast;
         this.environment = other.environment;
         this.timestamp = other.timestamp;
+        this.options = other.options;
+        this.root = other.root;
+        this.perThread = null;
     }
 
     /**

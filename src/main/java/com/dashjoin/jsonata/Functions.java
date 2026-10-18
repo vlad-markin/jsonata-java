@@ -1596,11 +1596,16 @@ public class Functions {
      */
     public static Object funcApply(Object func, List funcArgs) throws Throwable {
         Object res;
-        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda || func instanceof Pattern)
+        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda || func instanceof Pattern) {
             // like jsonata-js: native and host functions called from higher-order functions are
-            // validated against their signature (e.g. $map([null], $uppercase) -> T0410)
-            res = Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment);
-        else
+            // validated against their signature (e.g. $map([null], $uppercase) -> T0410).
+            // Outside of an evaluation (another thread, after evaluate) a context is provided.
+            try {
+                res = Jsonata.withContext(() -> Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment));
+            } catch (RuntimeException | Error e) {
+                throw e;
+            }
+        } else
             res = ((JFunction)func).call(null, funcArgs);
         return res;
     }
@@ -2472,16 +2477,22 @@ public class Functions {
     //      return datetime.fromMillis(timestamp.getTime(), picture, timezone);
     //  }, "<s?s?:s>"));
     public static String now(String picture, String timezone) {
-        long t = Jsonata.current.get().timestamp;
-        return dateTimeFromMillis(t, picture, timezone);
+        return dateTimeFromMillis(evaluationTime(), picture, timezone);
+    }
+
+    /** the timestamp of the current evaluation (jsonata-js: exec_env.timestamp) */
+    static long evaluationTime() {
+        Jsonata j = Jsonata.current.get();
+        if (j != null && j.environment != null && j.environment.base != null && j.environment.base.time != 0)
+            return j.environment.base.time;
+        return j != null ? j.timestamp : System.currentTimeMillis();
     }
 
     //  environment.bind("millis", defineFunction(function() {
     //      return timestamp.getTime();
     //  }, "<:n>"));
     public static long millis() {
-        long t = Jsonata.current.get().timestamp;
-        return t;
+        return evaluationTime();
     }
 
     /**
