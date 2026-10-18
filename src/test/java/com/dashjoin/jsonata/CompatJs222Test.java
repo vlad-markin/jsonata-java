@@ -451,4 +451,35 @@ public class CompatJs222Test {
         assertEquals("D3092", err("$formatNumber(1, '0e0%')"));
         assertEquals("D3093", err("$formatNumber(1, '0e#')"));
     }
+
+    /** NUM-04: $formatInteger / $parseInteger are ports of jsonata-js and compute with doubles. */
+    @Test
+    public void num04_formatParseInteger() {
+        assertEquals("ten billion trillion", jsonata("$formatInteger(1e22, 'w')").evaluate(null));
+        assertEquals("one thousand trillion trillion", jsonata("$formatInteger(1e27, 'w')").evaluate(null));
+        assertEquals("1e+21", jsonata("$formatInteger(1e21, '0')").evaluate(null));
+        assertEquals("1,234,567th", jsonata("$formatInteger(1234567, '#,##0;o')").evaluate(null));
+        assertEquals("12,34,567", jsonata("$formatInteger(1234567, '0,00,000')").evaluate(null));
+        assertEquals("\u0661\u0662\u0663", jsonata("$formatInteger(123, '\u0660')").evaluate(null));
+        assertEquals("-1", jsonata("$formatInteger(-0.5, '0')").evaluate(null));
+        assertEquals("MMXXVI", jsonata("$formatInteger(2026, 'I')").evaluate(null));
+        assertEquals("ab", jsonata("$formatInteger(28, 'a')").evaluate(null));
+        assertEquals("D3130", err("$formatInteger(22, '#;o')"));
+        assertEquals("D3131", err("$formatInteger(12340, '##0\uff10')"));
+        assertEquals(1e46, jsonata("$parseInteger('ten billion trillion trillion trillion', 'w')").evaluate(null));
+        assertEquals(12340, jsonata("$parseInteger('\u0661\u0662\u0663\u0664\u0660', '###\u0661')").evaluate(null));
+        assertEquals(-5, jsonata("$parseInteger('-5', '1')").evaluate(null));
+        assertEquals(12, jsonata("$parseInteger('12', '1')").evaluate(null));
+        assertEquals(31, jsonata("$parseInteger('0x1F', '0')").evaluate(null));
+        assertEquals(1234, jsonata("$parseInteger('1,234', '#,##0')").evaluate(null));
+        assertEquals(Double.NaN, jsonata("$parseInteger('ab', 'i')").evaluate(null));
+        assertEquals(Double.NaN, jsonata("$parseInteger('12', '0;o')").evaluate(null));
+        assertEquals("D3130", err("$parseInteger('50', '#')"));
+        // NaN behaves like in jsonata-js
+        assertEquals("object", jsonata("$type($parseInteger('ab', 'i'))").evaluate(null));
+        assertEquals(false, jsonata("$boolean($parseInteger('ab', 'i'))").evaluate(null));
+        assertEquals(false, jsonata("$parseInteger('ab', 'i') > 1").evaluate(null));
+        assertEquals("D3001", err("$string($parseInteger('ab', 'i'))"));
+        assertEquals("[null]", jsonata("$string([$parseInteger('ab', 'i')])").evaluate(null));
+    }
 }

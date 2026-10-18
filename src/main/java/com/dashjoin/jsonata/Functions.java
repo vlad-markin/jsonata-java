@@ -62,6 +62,7 @@ import com.dashjoin.jsonata.Utils.JList;
 import com.dashjoin.jsonata.json.Json;
 import com.dashjoin.jsonata.utils.Constants;
 import com.dashjoin.jsonata.utils.DateTimeUtils;
+import com.dashjoin.jsonata.utils.FormatInteger;
 import com.dashjoin.jsonata.utils.FormatNumber;
 import com.dashjoin.jsonata.utils.UriCodec;
 
@@ -172,6 +173,10 @@ public class Functions {
         // see https://docs.jsonata.org/string-functions#string: Strings are unchanged
         if (arg instanceof String)
           return (String) arg;
+
+        // NaN (e.g. from $parseInteger)
+        if (arg instanceof Number && !Double.isFinite(((Number) arg).doubleValue()))
+          throw new JException("D3001", -1, arg);
         
         StringBuilder sb = new StringBuilder();
         string(sb, arg, prettify!=null && prettify, "");
@@ -202,7 +207,11 @@ public class Functions {
           // jsonata-js: integers as String(n), other numbers as Number(n.toPrecision(15)),
           // both formatted like ECMAScript Number#toString (plain digits below 1e21)
           double d = ((Number)arg).doubleValue();
-          if (Double.isFinite(d) && d % 1 != 0)
+          if (!Double.isFinite(d)) {
+            // JSON.stringify
+            b.append("null"); return;
+          }
+          if (d % 1 != 0)
             d = new BigDecimal(d, new MathContext(15)).doubleValue();
           b.append(Utils.jsNumberToString(d)); return;
         }
@@ -1258,6 +1267,9 @@ public class Functions {
             return null;
         }
 
+        if (!Double.isFinite(arg.doubleValue()))
+            return Double.NaN;
+
         BigDecimal b = new BigDecimal(arg+"");
         if (precision==null)
             precision = 0;
@@ -1357,7 +1369,9 @@ public class Functions {
                 result = true;
             }
         } else if (arg instanceof Number) { //isNumeric(arg)) {
-            if (((Number)arg).doubleValue() != 0) {
+            double d = ((Number)arg).doubleValue();
+            // NaN is not numeric in jsonata-js and therefore false
+            if (d != 0 && !Double.isNaN(d)) {
                 result = true;
             }
         } else if (arg instanceof Map) {
@@ -1795,7 +1809,8 @@ public class Functions {
         }
 
         if (value instanceof Number) {
-            return "number";
+            // NaN is not numeric in jsonata-js
+            return Double.isNaN(((Number) value).doubleValue()) ? "object" : "number";
         }
 
         if (value instanceof String) {
@@ -2098,7 +2113,8 @@ public class Functions {
         
         try {
             Object res = m.invoke(null, callArgs.toArray());
-            if (res instanceof Number)
+            // NaN (e.g. from $parseInteger) is passed on like in jsonata-js
+            if (res instanceof Number && !(res instanceof Double && ((Double) res).isNaN()))
                 res = Utils.convertNumber((Number)res);
             return res;
         } catch (IllegalAccessException e) {
@@ -2197,66 +2213,17 @@ public class Functions {
      * @returns {string} - the formatted number
      */
     public static String formatInteger(Number value, String picture) {
-        if (value == null) {
-            return null;
-        }
-        return DateTimeUtils.formatInteger(value.longValue(), picture);
+        return FormatInteger.formatInteger(value, picture);
     }
 
     /**
      * parse a string containing an integer as specified by the picture string
      * @param {string} value - the string to parse
      * @param {string} picture - the picture string
-     * @throws ParseException
      * @returns {number} - the parsed number
      */
-    public static Number parseInteger(String value, String picture) throws ParseException, JException {
-        if (value == null) {
-            return null;
-        }
-
-        // const formatSpec = analyseIntegerPicture(picture);
-        // const matchSpec = generateRegex(formatSpec);
-        // //const fullRegex = '^' + matchSpec.regex + '$';
-        // //const matcher = new RegExp(fullRegex);
-        // // TODO validate input based on the matcher regex
-        // const result = matchSpec.parse(value);
-        // return result;
-        
-        if (picture != null) {
-          if (picture.equals("#"))
-            throw new ParseException("Formatting or parsing an integer as a sequence starting with \"#\" is not supported by this implementation", 0);
-          if (picture.endsWith(";o"))
-            picture = picture.substring(0, picture.length()-2);
-          if (picture.equals("a"))
-            return DateTimeUtils.lettersToDecimal(value, 'a');
-          if (picture.equals("A"))
-            return DateTimeUtils.lettersToDecimal(value, 'A');
-          if (picture.equals("i"))
-            return DateTimeUtils.romanToDecimal(value.toUpperCase());
-          if (picture.equals("I"))
-            return DateTimeUtils.romanToDecimal(value);
-          if (picture.equals("w"))
-            return DateTimeUtils.wordsToLong(value);
-          if (picture.equals("W") || picture.equals("wW") || picture.equals("Ww"))
-            return DateTimeUtils.wordsToLong(value.toLowerCase());
-          if (picture.indexOf(':') >= 0) {
-            value = value.replace(':', ',');
-            picture = picture.replace(':', ',');
-          }
-        }
-        
-        try {
-            java.text.DecimalFormat formatter = picture != null ? new java.text.DecimalFormat(picture, new java.text.DecimalFormatSymbols(Locale.US)) : new java.text.DecimalFormat();
-            return formatter.parse(value);
-        } catch (IllegalArgumentException ill) {
-            throw new ParseException("Formatting or parsing an integer as a sequence starting with \""+ picture +"\" is not supported by this implementation", 0);
-        } catch (Exception ex) {
-            // Ignore the exception, return null
-            // System.err.println("Exception in parseInteger (returning null): " + ex);
-            // ex.printStackTrace();
-            return null;
-        }
+    public static Number parseInteger(String value, String picture) {
+        return FormatInteger.parseInteger(value, picture);
     }
 
     /**

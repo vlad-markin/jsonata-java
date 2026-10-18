@@ -1025,6 +1025,17 @@ public class Jsonata {
             );
         }
 
+        if (lhs instanceof Number) {
+            // primitive comparison: false for NaN like in JavaScript
+            double l = ((Number) lhs).doubleValue(), r = ((Number) rhs).doubleValue();
+            switch (op) {
+                case "<": return l < r;
+                case "<=": return l <= r;
+                case ">": return l > r;
+                case ">=": return l >= r;
+            }
+        }
+
         Comparable _lhs = (Comparable)lhs;
 
         switch (op) {

@@ -1,25 +1,5 @@
 {
     "override": [
-        {
-            "name": "function-formatInteger/formatInteger.json_43",
-            "ignoreError": true,
-            "reason": "Do not support number to word for numbers exceeding the 64-bit range"
-        },
-        {
-			"name": "function-parseInteger/parseInteger.json_11",
-            "ignoreError": true,
-            "reason": "Cannot parse special chars"
-        },
-        {   
-			"name": "function-parseInteger/parseInteger.json_12",
-            "ignoreError": true,
-            "reason": "Cannot parse special chars"
-        },
-        {   
-			"name": "function-parseInteger/parseInteger.json_39",
-            "ignoreError": true,
-            "reason": "Implementation currently uses Long instead of BigDecimal"
-        },
         { 
             "name": "function-fromMillis/isoWeekDate.json_0",
             "ignoreError": true,
