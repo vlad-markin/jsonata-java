@@ -1,0 +1,4 @@
+node_modules/
+jvm/target/
+out/
+*.log

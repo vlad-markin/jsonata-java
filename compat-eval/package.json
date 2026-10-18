@@ -1,0 +1,10 @@
+{
+  "name": "jsonata-compat-eval",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Compatibility evaluation of JVM JSONata engines against jsonata-js 2.2.2",
+  "license": "MIT",
+  "dependencies": {
+    "jsonata": "2.2.2"
+  }
+}
