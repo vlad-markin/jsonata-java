@@ -214,6 +214,9 @@ public class Functions {
         }
 
         if (arg instanceof Map) {
+            if (((Map) arg).isEmpty()) {
+                b.append("{}"); return;
+            }
             b.append('{');
             if (prettify)
                 b.append('\n');

@@ -172,4 +172,15 @@ public class CompatJs222Test {
         assertEquals("5e-324", jsonata("$string(5e-324)").evaluate(null));
         assertEquals("[1.5,100000000000000000000]", jsonata("$string([1.5, 1e20])").evaluate(null));
     }
+
+    /** STR-04: $string escapes like JSON.stringify and prints empty objects as {} when prettified. */
+    @Test
+    public void str04_stringEscapingAndPrettyPrint() {
+        assertEquals("{\"a\":\"\u20ac \u201cq\u201d \u2013 \u2026 \u0085 \\ud800 \u2028\"}",
+                jsonata("$string({'a': '\u20ac \u201cq\u201d \u2013 \u2026 \u0085 \ud800 \u2028'})").evaluate(null));
+        assertEquals("{}", jsonata("$string({}, true)").evaluate(null));
+        assertEquals("{\n  \"a\": {\n    \"b\": {}\n  }\n}", jsonata("$string({'a':{'b':{}}}, true)").evaluate(null));
+        assertEquals("[\n  [],\n  {}\n]", jsonata("$string([[],{}], true)").evaluate(null));
+        assertEquals("[\"\ud83d\ude00\"]", jsonata("$string(['\ud83d\ude00'])").evaluate(null));
+    }
 }

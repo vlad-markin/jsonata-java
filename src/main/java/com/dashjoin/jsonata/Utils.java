@@ -390,8 +390,10 @@ public class Utils {
               w.append("\\r");
               break;
           default:
-              if (c < ' ' || (c >= '\u0080' && c < '\u00a0')
-                      || (c >= '\u2000' && c < '\u2100')) {
+              // like JSON.stringify: escape control characters and lone surrogates only
+              boolean lone = Character.isHighSurrogate(c) ? !(i + 1 < len && Character.isLowSurrogate(string.charAt(i + 1)))
+                      : Character.isLowSurrogate(c) && !(i > 0 && Character.isHighSurrogate(string.charAt(i - 1)));
+              if (c < ' ' || lone) {
                   w.append("\\u");
                   hhhh = Integer.toHexString(c);
                   w.append("0000", 0, 4 - hhhh.length());
