@@ -26,17 +26,21 @@ public class NullSafetyTest {
         res = jsonata("$keys(null)").evaluate(null);
         Assertions.assertEquals(null, res);
 
-        res = jsonata("$map(null, $uppercase)").evaluate(null);
-        Assertions.assertEquals(null, res);
+        // jsonata-js 2.2.2: JSON null is a value; $uppercase(null) fails signature validation
+        Assertions.assertEquals("T0410", Assertions.assertThrows(JException.class,
+            () -> jsonata("$map(null, $uppercase)").evaluate(null)).getError());
         
-        res = jsonata("$filter(null, $uppercase)").evaluate(null);
-        Assertions.assertEquals(null, res);
+        // jsonata-js 2.2.2: JSON null is a value; $uppercase(null) fails signature validation
+        Assertions.assertEquals("T0410", Assertions.assertThrows(JException.class,
+            () -> jsonata("$filter(null, $uppercase)").evaluate(null)).getError());
 
-        res = jsonata("$single(null, $uppercase)").evaluate(null);
-        Assertions.assertEquals(null, res);
+        // jsonata-js 2.2.2: JSON null is a value; $uppercase(null) fails signature validation
+        Assertions.assertEquals("T0410", Assertions.assertThrows(JException.class,
+            () -> jsonata("$single(null, $uppercase)").evaluate(null)).getError());
 
-        res = jsonata("$reduce(null, $uppercase)").evaluate(null);
-        Assertions.assertEquals(null, res);
+        // jsonata-js 2.2.2: JSON null is a value; $uppercase(null) fails signature validation
+        Assertions.assertEquals("D3050", Assertions.assertThrows(JException.class,
+            () -> jsonata("$reduce(null, $uppercase)").evaluate(null)).getError());
 
         res = jsonata("$lookup(null, 'anykey')").evaluate(null);
         Assertions.assertEquals(null, res);

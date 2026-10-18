@@ -178,10 +178,26 @@ public class Jsonata {
      */
     Object evaluate(Symbol expr, Object input, Frame environment) {
         // Thread safety:
-        // Make sure each evaluate is executed on an instance per thread
-        Jsonata _this = getPerThreadInstance();
-        // Save and restore the evaluation context so that nested
-        // evaluations (e.g. $eval()) see the correct context.        
+        // Make sure each evaluate is executed on an instance per thread (and per expression)
+        Jsonata cur = current.get();
+        if (cur == this) {
+            // fast path: recursive evaluation on the active per-thread instance
+            // Save and restore the evaluation context so that nested
+            // evaluations (e.g. $eval()) see the correct context.
+            Object _input = this.input;
+            Frame _environment = this.environment;
+            try {
+              return this._evaluate(expr, input, environment);
+            } finally {
+                this.input = _input;
+                this.environment = _environment;
+            }
+        }
+        // entering an evaluation of this expression (top level, or nested inside the evaluation
+        // of another expression, e.g. from a host function): activate this expression's
+        // per-thread instance and restore the previous one afterwards
+        Jsonata _this = (cur != null && cur.root == this.root) ? cur : getPerThreadInstance();
+        current.set(_this);
         Object _input = _this.input;
         Frame _environment = _this.environment;
         try {
@@ -189,7 +205,36 @@ public class Jsonata {
         } finally {
             _this.input = _input;
             _this.environment = _environment;
+            if (cur == null)
+                current.remove();
+            else
+                current.set(cur);
         }
+    }
+
+    /**
+     * Runs the given action with an active evaluation context on this thread (used when a host
+     * calls a JSONata function value outside of an evaluation, e.g. from another thread).
+     */
+    static <T> T withContext(java.util.concurrent.Callable<T> action) throws Exception {
+        if (current.get() != null)
+            return action.call();
+        Jsonata ctx = detached().getPerThreadInstance();
+        current.set(ctx);
+        try {
+            return action.call();
+        } finally {
+            current.remove();
+        }
+    }
+
+    private static volatile Jsonata detached;
+
+    static Jsonata detached() {
+        Jsonata d = detached;
+        if (d == null)
+            detached = d = new Jsonata("$", null);
+        return d;
     }
 
     Object _evaluate(Symbol expr, Object input, Frame environment) {
@@ -662,12 +707,14 @@ public class Jsonata {
 
             try {
                 return /* await */ evaluateBooleanExpression(lhs, evalrhs, op);
+            } catch(JException err) {
+                // like jsonata-js: errors of the operands are reported at the operator
+                err.location = expr.position;
+                throw err;
+            } catch(RuntimeException err) {
+                throw err;
             } catch(Exception err) {
-            if (!(err instanceof JException))
-                throw new JException("Unexpected", expr.position);
-                //err.position = expr.position;
-                //err.token = op;
-                throw (JException)err;
+                throw new RuntimeException(err);
             }
         }
 
@@ -695,7 +742,14 @@ public class Jsonata {
                     result = evaluateStringConcat(lhs, rhs);
                     break;
                 case "..":
-                    result = evaluateRangeExpression(lhs, rhs);
+                    try {
+                        result = evaluateRangeExpression(lhs, rhs);
+                    } catch (JException jex) {
+                        // like jsonata-js evaluateBinary
+                        jex.location = expr.position;
+                        jex.current = op;
+                        throw jex;
+                    }
                     break;
                 case "in":
                     result = evaluateIncludesExpression(lhs, rhs);
@@ -703,9 +757,9 @@ public class Jsonata {
             default:
                 throw new JException("Unexpected operator "+op, expr.position);
             }
-        } catch(Exception err) {
-            //err.position = expr.position;
-            //err.token = op;
+        } catch(JException err) {
+            // like jsonata-js: errors of numeric/comparison/range/... evaluation are reported at the operator
+            err.location = expr.position;
             throw err;
         }
         return result;
@@ -735,7 +789,6 @@ public class Jsonata {
                         "D1002",
                         //stack: (new Error()).stack,
                         expr.position,
-                        expr.value,
                         result
                     );
                 }
@@ -964,20 +1017,14 @@ public class Jsonata {
             return false;
         }
 
-        // JSON might come with integers,
-        // convert all to double...
-        // FIXME: semantically OK?
-        if (lhs instanceof Number)
-            lhs = ((Number)lhs).doubleValue();
-        if (rhs instanceof Number)
-            rhs = ((Number)rhs).doubleValue();
-
+        // numbers of any Java type (Integer, Long, Double) are compared by value, also inside
+        // arrays and objects (jsonata-js isDeepEqual)
         switch (op) {
             case "=":
-                result = lhs.equals(rhs); // isDeepEqual(lhs, rhs);
+                result = Utils.isDeepEqual(lhs, rhs);
                 break;
             case "!=":
-                result = !lhs.equals(rhs); // !isDeepEqual(lhs, rhs);
+                result = !Utils.isDeepEqual(lhs, rhs);
                 break;
         }
         return result;
@@ -1025,11 +1072,23 @@ public class Jsonata {
 
             throw new JException(
                 "T2009",
-                0, // location?
+                -1,
                 // stack: (new Error()).stack,
                 lhs,
-                rhs
+                rhs,
+                op
             );
+        }
+
+        if (lhs instanceof Number) {
+            // primitive comparison: false for NaN like in JavaScript
+            double l = ((Number) lhs).doubleValue(), r = ((Number) rhs).doubleValue();
+            switch (op) {
+                case "<": return l < r;
+                case "<=": return l <= r;
+                case ">": return l > r;
+                case ">=": return l >= r;
+            }
         }
 
         Comparable _lhs = (Comparable)lhs;
@@ -1072,8 +1131,17 @@ public class Jsonata {
         }
 
         for(var i = 0; i < ((List)rhs).size(); i++) {
-            Object tmp = evaluateEqualityExpression(lhs, ((List)rhs).get(i), "=");
-            if (Boolean.TRUE.equals(tmp)) {
+            // jsonata-js uses strict equality (===): numbers and strings by value,
+            // arrays and objects by identity
+            Object item = ((List)rhs).get(i);
+            boolean same;
+            if (lhs instanceof Number && item instanceof Number)
+                same = ((Number)lhs).doubleValue() == ((Number)item).doubleValue();
+            else if (lhs instanceof Map || lhs instanceof List)
+                same = lhs == item;
+            else
+                same = lhs.equals(item);
+            if (same) {
                 result = true;
                 break;
             }
@@ -1266,16 +1334,15 @@ public class Jsonata {
     Object evaluateRangeExpression(Object lhs, Object rhs) {
         Object result = null;
 
-        if (lhs != null && (!(lhs instanceof Long) && !(lhs instanceof Integer))) {
+        // jsonata-js: Number.isInteger (doubles, also beyond the long range)
+        if (lhs != null && !isInteger(lhs)) {
             throw new JException("T2003",
-                //stack: (new Error()).stack,
                 -1,
                 lhs
             );
         }
-        if (rhs != null && (!(rhs instanceof Long) && !(rhs instanceof Integer))) {
+        if (rhs != null && !isInteger(rhs)) {
             throw new JException("T2004",
-            //stack: (new Error()).stack,
             -1,
             rhs
             );
@@ -1286,7 +1353,7 @@ public class Jsonata {
             return result;
         }
 
-        long _lhs = ((Number)lhs).longValue(), _rhs = ((Number)rhs).longValue();
+        double _lhs = ((Number)lhs).doubleValue(), _rhs = ((Number)rhs).doubleValue();
 
         if (_lhs > _rhs) {
             // if the lhs is greater than the rhs, return undefined
@@ -1296,21 +1363,44 @@ public class Jsonata {
         // limit the size of the array to ten million entries (1e7)
         // this is an implementation defined limit to protect against
         // memory and performance issues.  This value may increase in the future.
-        var size = _rhs - _lhs + 1;
+        double size = _rhs - _lhs + 1;
         if(size > 1e7) {
             throw new JException("D2014",
-                //stack: (new Error()).stack,
                 -1,
-                size
+                Utils.convertNumber(size)
             );
         }
-        if(environment.base.options!=null && size > environment.base.options.sequence) {
+        if(environment.base.options!=null && environment.base.options.sequence!=null && size > environment.base.options.sequence) {
             throw new JException("D2015",
                 -1,
-                size
+                Utils.convertNumber(size)
             );
         }
-        return new Utils.RangeList(_lhs, _rhs);
+        if (_rhs >= 9007199254740992.0) {
+            // jsonata-js increments the items with item++, which gets stuck at 2^53
+            // (2^53 + 1 is not representable) until the array exceeds its maximum length
+            throw new IllegalArgumentException("Invalid array length");
+        }
+        if (_lhs < -9007199254740992.0) {
+            // beyond the safe integer range: increment like jsonata-js
+            List<Object> items = new ArrayList<>();
+            for (double item = _lhs; item <= _rhs; ) {
+                items.add(Utils.convertNumber(item));
+                double next = item + 1;
+                if (next == item)
+                    throw new IllegalArgumentException("Invalid array length");
+                item = next;
+            }
+            return items;
+        }
+        return new Utils.RangeList((long) _lhs, (long) _rhs);
+    }
+
+    private static boolean isInteger(Object n) {
+        if (!(n instanceof Number))
+            return false;
+        double d = ((Number) n).doubleValue();
+        return Double.isFinite(d) && Math.floor(d) == d;
     }
  
     /**
@@ -1483,10 +1573,11 @@ public class Jsonata {
                         bb
                     );
                 }
-                if(aa.equals(bb)) {
+                int c = Utils.compareTo(aa, bb);
+                if(c == 0) {
                     // both the same - move on to next term
                     continue;
-                } else if (Utils.compareTo(aa, bb)<0) {
+                } else if (c < 0) {
                     comp = -1;
                 } else {
                     comp = 1;
@@ -1508,7 +1599,13 @@ public class Jsonata {
         //  // the `focus` is passed in as the `this` for the invoked function
         //  result = /* await */ fn.sort.apply(focus, [lhs, comparator]);
  
-        result = Functions.sort(lhs, comparator);
+        try {
+            result = Functions.sort(lhs, comparator);
+        } catch (RuntimeException | Error e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
         return result;        
     }
  
@@ -1662,20 +1759,20 @@ public class Jsonata {
      * @return
      */
     Jsonata getPerThreadInstance() {
-        Jsonata threadInst = current.get();
-        // Fast path
-        if (threadInst!=null)
-            return threadInst;
-
-        synchronized(this) {
-            threadInst = current.get();
-            if (threadInst==null) {
-                threadInst = new Jsonata(this);
-                current.set(threadInst);
-            }
-            return threadInst;
+        // one instance per thread and per compiled expression (root)
+        Jsonata threadInst = root.perThread.get();
+        if (threadInst == null) {
+            threadInst = new Jsonata(root);
+            root.perThread.set(threadInst);
         }
+        return threadInst;
     }
+
+    /** the compiled expression this (per-thread) instance belongs to */
+    final Jsonata root;
+
+    /** per-thread instances of this expression (only used on the root) */
+    final ThreadLocal<Jsonata> perThread;
 
      /**
       * Evaluate Object against input data
@@ -1858,23 +1955,16 @@ public class Jsonata {
                     result = ((Fn2)proc).apply(_args.size() <= 0 ? null : _args.get(0), _args.size() <= 1 ? null :_args.get(1));
                 }
              } else if (proc instanceof Pattern) {
-                List _res = new ArrayList<>();
-                for (Object s : (List)validatedArgs) {
-                //System.err.println("PAT "+proc+" input "+s);
-                    if (s instanceof String) {
-                        Matcher matcher = ((Pattern) proc).matcher((String) s);
-                        _res.add(regexClosure(matcher));
-                    }
-                }
-                if (_res.size() == 1) {
-                    result = _res.get(0);
-                } else {
-                    result = _res;
-                }
+                // regex used as a function: the jsonata-js matcher closure function(str, fromIndex)
+                List _args = (List)validatedArgs;
+                Object str = _args.size() > 0 ? _args.get(0) : null;
+                Object from = _args.size() > 1 ? _args.get(1) : null;
+                result = str instanceof String
+                    ? Functions.regexMatch((Pattern) proc, (String) str, from instanceof Number ? ((Number) from).intValue() : 0)
+                    : null;
              } else {
-                System.out.println("Proc not found "+proc);
                  throw new JException(
-                     "T1006", 0
+                     "T1006", -1
                      //stack: (new Error()).stack
                  );
              }
@@ -1890,21 +1980,6 @@ public class Jsonata {
          return result;
      }
 
-    private static Map regexClosure(Matcher matcher) {
-        if (matcher.find()) {
-            String group = matcher.group();
-            return Map.of(
-                    "match", group,
-                    "start", matcher.start(),
-                    "end", matcher.end(),
-                    "groups", List.of(group),
-                    "next", (Fn0<Map>) () -> regexClosure(matcher)
-            );
-        } else {
-            return null;
-        }
-    }
- 
      /**
       * Evaluate lambda against input data
       * @param {Object} expr - JSONata expression
@@ -1946,7 +2021,8 @@ public class Jsonata {
         var evaluatedArgs = new ArrayList<>();
         for(var ii = 0; ii < expr.arguments.size(); ii++) {
             var arg = expr.arguments.get(ii);
-            if (arg.type.equals("operator") && (arg.value.equals("?"))) {
+            // note: the value of the '?' token is a Character
+            if (arg.type.equals("operator") && ("?".equals(String.valueOf(arg.value)))) {
                 evaluatedArgs.add(arg);
             } else {
                 evaluatedArgs.add(/* await */ evaluate(arg, input, environment));
@@ -1954,7 +2030,7 @@ public class Jsonata {
         }
         // lookup the procedure
         var proc = /* await */ evaluate(expr.procedure, input, environment);
-        if (proc != null && expr.procedure.type.equals("path") && environment.lookup((String)expr.procedure.steps.get(0).value)!=null) {
+        if (proc == null && expr.procedure.type.equals("path") && environment.lookup((String)expr.procedure.steps.get(0).value)!=null) {
             // help the user out here if they simply forgot the leading $
             throw new JException("T1007",
                 expr.position,
@@ -2035,7 +2111,10 @@ public class Jsonata {
         for (var param : proc.arguments) {
 //         proc.arguments.forEach(Object (param, index) {
             Object arg = index<args.size() ? args.get(index) : null;
-            if ((arg==null) || (arg instanceof Symbol && ("operator".equals(((Symbol)arg).type) && "?".equals(((Symbol)arg).value)))) {
+
+            // jsonata-js: only '?' placeholders stay unbound; missing or undefined arguments are
+            // bound as undefined (otherwise the partial function takes extra parameters)
+            if (arg instanceof Symbol && ("operator".equals(((Symbol)arg).type) && "?".equals(String.valueOf(((Symbol)arg).value)))) {
                 unboundArgs.add(param);
             } else {
                 env.bind((String)param.value, arg);
@@ -2066,32 +2145,27 @@ public class Jsonata {
 
         //var body = "function($a,$c) { $substring($a,0,$c) }";
 
+        // number of parameters of the native function: declared Java parameters, else the
+        // signature, else the number of supplied arguments (host functions without signature)
+        int nargs = _native.getNumberOfArgs();
+        if (_native.method == null)
+            nargs = _native.signature != null ? _native.signature.getNumberOfArgs() : args.size();
+        nargs = Math.max(nargs, args.size());
         List sigArgs = new ArrayList<>();
-        List partArgs = new ArrayList<>();
-        for (int i=0; i<_native.getNumberOfArgs(); i++) {
-            String argName = "$" + (char)('a'+i);
-            sigArgs.add(argName);
-            if (i>=args.size() || args.get(i)==null)
-                partArgs.add(argName);
-            else
-                partArgs.add(args.get(i));
-        }
+        for (int i=0; i<nargs; i++)
+            sigArgs.add("$" + (char)('a'+i));
 
+        // the trampoline calls the function object itself (bound as $__native in the closure),
+        // so it works for unnamed host functions too
         var body = "function(" + String.join(", ", sigArgs) + "){";
-        body += "$"+_native.functionName+"("+String.join(", ", sigArgs) + ") }";
+        body += "$__native("+String.join(", ", sigArgs) + ") }";
 
         if (parser.dbg) System.out.println("partial trampoline = "+body);
 
-        //  var sigArgs = getNativeFunctionArguments(_native);
-        //  sigArgs = sigArgs.stream().map(sigArg -> {
-        //      return "$" + sigArg;
-        //  }).toList();
-        //  var body = "function(" + String.join(", ", sigArgs) + "){ _ }";
-
         var bodyAST = parser.parse(body);
-        //bodyAST.body = _native;
 
-        var partial = partialApplyProcedure(bodyAST, (List)args);
+        var partial = (Symbol) partialApplyProcedure(bodyAST, (List)args);
+        partial.environment.bind("__native", _native);
         return partial;
     }
  
@@ -2466,7 +2540,7 @@ public class Jsonata {
         put("S0205", "Unexpected token: {{token}}");
         put("S0206", "Unknown expression type: {{token}}");
         put("S0207", "Unexpected end of expression");
-        put("S0208", "Parameter {{value}} of Object definition must be a variable name (start with $)");
+        put("S0208", "Parameter {{value}} of function definition must be a variable name (start with $)");
         put("S0209", "A predicate cannot follow a grouping expression in a step");
         put("S0210", "Each step can only have one grouping expression");
         put("S0211", "The symbol {{token}} cannot be used as a unary operator");
@@ -2474,16 +2548,16 @@ public class Jsonata {
         put("S0213", "The literal value {{value}} cannot be used as a step within a path expression");
         put("S0214", "The right side of {{token}} must be a variable name (start with $)");
         put("S0215", "A context variable binding must precede any predicates on a step");
-        put("S0216", "A context variable binding must precede the \"order-by\" clause on a step");
-        put("S0217", "The object representing the \"parent\" cannot be derived from this expression");
+        put("S0216", "A context variable binding must precede the 'order-by' clause on a step");
+        put("S0217", "The object representing the 'parent' cannot be derived from this expression");
         put("S0301", "Empty regular expressions are not allowed");
         put("S0302", "No terminating / in regular expression");
         put("S0402", "Choice groups containing parameterized types are not supported");
         put("S0401", "Type parameters can only be applied to functions and arrays");
         put("S0500", "Attempted to evaluate an expression containing syntax error(s)");
-        put("T0410", "Argument {{index}} of Object {{token}} does not match Object signature");
-        put("T0411", "Context value is not a compatible type with argument {{index}} of Object {{token}}");
-        put("T0412", "Argument {{index}} of Object {{token}} must be an array of {{type}}");
+        put("T0410", "Argument {{index}} of function {{token}} does not match function signature");
+        put("T0411", "Context value is not a compatible type with argument {{index}} of function {{token}}");
+        put("T0412", "Argument {{index}} of function {{token}} must be an array of {{type}}");
         put("D1001", "Number out of range: {{value}}");
         put("D1002", "Cannot negate a non-numeric value: {{value}}");
         put("T1003", "Key in object structure must evaluate to a string; got: {{value}}");
@@ -2493,7 +2567,7 @@ public class Jsonata {
         put("T1007", "Attempted to partially apply a non-function. Did you mean ${{{token}}}?");
         put("T1008", "Attempted to partially apply a non-function");
         put("D1009", "Multiple key definitions evaluate to same key: {{value}}");
-        put("T1010", "The matcher Object argument passed to Object {{token}} does not return the correct object structure");
+        put("T1010", "The matcher function argument passed to function {{token}} does not return the correct object structure");
         put("D1011", "Stack overflow. Check for non-terminating recursive function.  Consider rewriting as tail-recursive");
         put("D1012", "Evaluation timeout after {{value}} milliseconds. Check for infinite loop");
         put("T2001", "The left side of the {{token}} operator must evaluate to a number");
@@ -2501,7 +2575,7 @@ public class Jsonata {
         put("T2003", "The left side of the range operator (..) must evaluate to an integer");
         put("T2004", "The right side of the range operator (..) must evaluate to an integer");
         put("D2005", "The left side of := must be a variable name (start with $)");  // defunct - replaced by S0212 parser error
-        put("T2006", "The right side of the Object application operator ~> must be a function");
+        put("T2006", "The right side of the function application operator ~> must be a function");
         put("T2007", "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause");
         put("T2008", "The expressions within an order-by clause must evaluate to numeric or string values");
         put("T2009", "The values {{value}} and {{value2}} either side of operator {{token}} must be of the same data type");
@@ -2510,47 +2584,49 @@ public class Jsonata {
         put("T2012", "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}");
         put("T2013", "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.");
         put("D2014", "The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {{value}}.");
+        put("D1013", "Object property names starting with _jsonata_ are reserved for internal use: {{value}}");
+        put("U1001", "{{{message}}}");
         put("D2015", "The maximum sequence length of {{value}} was exceeded.");
         put("D2016", "The size of the string requested by the $pad function must not exceed 1e7.  Attempted to allocate {{value}}.");
-        put("D3001", "Attempting to invoke string Object on Infinity or NaN");
-        put("D3010", "Second argument of replace Object cannot be an empty string");
-        put("D3011", "Fourth argument of replace Object must evaluate to a positive number");
+        put("D3001", "Attempting to invoke string function on Infinity or NaN");
+        put("D3010", "Second argument of replace function cannot be an empty string");
+        put("D3011", "Fourth argument of replace function must evaluate to a positive number");
         put("D3012", "Attempted to replace a matched string with a non-string value");
-        put("D3020", "Third argument of split Object must evaluate to a positive number");
+        put("D3020", "Third argument of split function must evaluate to a positive number");
         put("D3030", "Unable to cast value to a number: {{value}}");
-        put("D3040", "Third argument of match Object must evaluate to a positive number");
-        put("D3050", "The second argument of reduce Object must be a Object with at least two arguments");
-        put("D3060", "The sqrt Object cannot be applied to a negative number: {{value}}");
-        put("D3061", "The power Object has resulted in a value that cannot be represented as a JSON number: base={{value}}, exponent={{exp}}");
-        put("D3070", "The single argument form of the sort Object can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function");
+        put("D3040", "Third argument of match function must evaluate to a positive number");
+        put("D3050", "The second argument of reduce function must be a function with at least two arguments");
+        put("D3060", "The sqrt function cannot be applied to a negative number: {{value}}");
+        put("D3061", "The power function has resulted in a value that cannot be represented as a JSON number: base={{value}}, exponent={{exp}}");
+        put("D3070", "The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function");
         put("D3080", "The picture string must only contain a maximum of two sub-pictures");
-        put("D3081", "The sub-picture must not contain more than one instance of the \"decimal-separator\" character");
-        put("D3082", "The sub-picture must not contain more than one instance of the \"percent\" character");
-        put("D3083", "The sub-picture must not contain more than one instance of the \"per-mille\" character");
-        put("D3084", "The sub-picture must not contain both a \"percent\" and a \"per-mille\" character");
-        put("D3085", "The mantissa part of a sub-picture must contain at least one character that is either an \"optional digit character\" or a member of the \"decimal digit family\"");
+        put("D3081", "The sub-picture must not contain more than one instance of the 'decimal-separator' character");
+        put("D3082", "The sub-picture must not contain more than one instance of the 'percent' character");
+        put("D3083", "The sub-picture must not contain more than one instance of the 'per-mille' character");
+        put("D3084", "The sub-picture must not contain both a 'percent' and a 'per-mille' character");
+        put("D3085", "The mantissa part of a sub-picture must contain at least one character that is either an 'optional digit character' or a member of the 'decimal digit family'");
         put("D3086", "The sub-picture must not contain a passive character that is preceded by an active character and that is followed by another active character");
-        put("D3087", "The sub-picture must not contain a \"grouping-separator\" character that appears adjacent to a \"decimal-separator\" character");
-        put("D3088", "The sub-picture must not contain a \"grouping-separator\" at the end of the integer part");
-        put("D3089", "The sub-picture must not contain two adjacent instances of the \"grouping-separator\" character");
-        put("D3090", "The integer part of the sub-picture must not contain a member of the \"decimal digit family\" that is followed by an instance of the \"optional digit character\"");
-        put("D3091", "The fractional part of the sub-picture must not contain an instance of the \"optional digit character\" that is followed by a member of the \"decimal digit family\"");
-        put("D3092", "A sub-picture that contains a \"percent\" or \"per-mille\" character must not contain a character treated as an \"exponent-separator\"");
-        put("D3093", "The exponent part of the sub-picture must comprise only of one or more characters that are members of the \"decimal digit family\"");
-        put("D3100", "The radix of the formatBase Object must be between 2 and 36.  It was given {{value}}");
-        put("D3110", "The argument of the toMillis Object must be an ISO 8601 formatted timestamp. Given {{value}}");
-        put("D3120", "Syntax error in expression passed to Object eval: {{value}}");
-        put("D3121", "Dynamic error evaluating the expression passed to Object eval: {{value}}");
+        put("D3087", "The sub-picture must not contain a 'grouping-separator' character that appears adjacent to a 'decimal-separator' character");
+        put("D3088", "The sub-picture must not contain a 'grouping-separator' at the end of the integer part");
+        put("D3089", "The sub-picture must not contain two adjacent instances of the 'grouping-separator' character");
+        put("D3090", "The integer part of the sub-picture must not contain a member of the 'decimal digit family' that is followed by an instance of the 'optional digit character'");
+        put("D3091", "The fractional part of the sub-picture must not contain an instance of the 'optional digit character' that is followed by a member of the 'decimal digit family'");
+        put("D3092", "A sub-picture that contains a 'percent' or 'per-mille' character must not contain a character treated as an 'exponent-separator'");
+        put("D3093", "The exponent part of the sub-picture must comprise only of one or more characters that are members of the 'decimal digit family'");
+        put("D3100", "The radix of the formatBase function must be between 2 and 36.  It was given {{value}}");
+        put("D3110", "The argument of the toMillis function must be an ISO 8601 formatted timestamp. Given {{value}}");
+        put("D3120", "Syntax error in expression passed to function eval: {{value}}");
+        put("D3121", "Dynamic error evaluating the expression passed to function eval: {{value}}");
         put("D3130", "Formatting or parsing an integer as a sequence starting with {{value}} is not supported by this implementation");
         put("D3131", "In a decimal digit pattern, all digits must be from the same decimal group");
         put("D3132", "Unknown component specifier {{value}} in date/time picture string");
-        put("D3133", "The \"name\" modifier can only be applied to months and days in the date/time picture string, not {{value}}");
+        put("D3133", "The 'name' modifier can only be applied to months and days in the date/time picture string, not {{value}}");
         put("D3134", "The timezone integer format specifier cannot have more than four digits");
-        put("D3135", "No matching closing bracket \"]\" in date/time picture string");
+        put("D3135", "No matching closing bracket ']' in date/time picture string");
         put("D3136", "The date/time picture string is missing specifiers required to parse the timestamp");
         put("D3137", "{{{message}}}");
-        put("D3138", "The $single() Object expected exactly 1 matching result.  Instead it matched more.");
-        put("D3139", "The $single() Object expected exactly 1 matching result.  Instead it matched 0.");
+        put("D3138", "The $single() function expected exactly 1 matching result.  Instead it matched more.");
+        put("D3139", "The $single() function expected exactly 1 matching result.  Instead it matched 0.");
         put("D3140", "Malformed URL passed to ${{{functionName}}}(): {{value}}");
         put("D3141", "{{{message}}}");
      }};
@@ -2655,8 +2731,10 @@ public class Jsonata {
         //      jsonata.RegexEngine = RegExp;
         //  }
 
-        // Set instance for this thread
-        current.set(this);
+        // Note: the constructor no longer sets the thread's current instance; evaluate() activates
+        // a per-thread instance of this expression and restores the previous one afterwards
+        root = this;
+        perThread = new ThreadLocal<>();
     }
 
     /**
@@ -2669,6 +2747,9 @@ public class Jsonata {
         this.ast = other.ast;
         this.environment = other.environment;
         this.timestamp = other.timestamp;
+        this.options = other.options;
+        this.root = other.root;
+        this.perThread = null;
     }
 
     /**
@@ -2732,16 +2813,14 @@ public class Jsonata {
             throw new JException("S0500", 0);
         }
 
-        Frame exec_env;
+        // Always evaluate in a fresh frame (jsonata-js 2.2.2, df63a7c): otherwise top-level
+        // assignments, $$ and guardrail counters are shared between evaluations and threads.
+        Frame exec_env = createFrame(environment);
         if (bindings != null) {
-            //var exec_env;
-            // the variable bindings have been passed in - create a frame to hold these
-            exec_env = createFrame(environment);
+            // the variable bindings have been passed in - add them to the frame
             for (var v : bindings.bindings.keySet()) {
                 exec_env.bind(v, bindings.lookup(v));
             }
-        } else {
-            exec_env = environment;
         }
         // put the input document into the environment as the root object
         exec_env.bind("$", input);

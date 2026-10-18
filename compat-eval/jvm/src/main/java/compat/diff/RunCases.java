@@ -100,7 +100,10 @@ public class RunCases {
             }
             Object input = c.containsKey("input") ? c.get("input") : Values.UNDEFINED;
             phase = "compile";
-            Engine.Compiled compiled = engine.compile((String) c.get("expr"), (Map<String, Object>) c.get("options"));
+            // "exprJvm": expression evaluated by the JVM side instead of "expr" (used to verify rewrites:
+            // original on jsonata-js vs. rewritten on the JVM engine)
+            String expr = (String) (c.get("exprJvm") != null ? c.get("exprJvm") : c.get("expr"));
+            Engine.Compiled compiled = engine.compile(expr, (Map<String, Object>) c.get("options"));
             phase = "evaluate";
             result = compiled.evaluate(input, bindings, functions, opts);
         } catch (EngineError e) {

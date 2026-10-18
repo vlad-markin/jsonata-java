@@ -64,6 +64,139 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Deep equality as in jsonata-js utils.isDeepEqual: numbers are compared by value regardless of
+     * their Java type (Integer, Long, Double...), arrays element-wise, objects by key set and values.
+     */
+    public static boolean isDeepEqual(Object lhs, Object rhs) {
+        if (lhs == rhs)
+            return true;
+        if (lhs == null || rhs == null)
+            return false;
+        if (lhs == Jsonata.NULL_VALUE || rhs == Jsonata.NULL_VALUE)
+            return false;
+        if (lhs instanceof Number && rhs instanceof Number)
+            return ((Number) lhs).doubleValue() == ((Number) rhs).doubleValue();
+        if (lhs instanceof List && rhs instanceof List) {
+            List<?> l = (List<?>) lhs, r = (List<?>) rhs;
+            if (l.size() != r.size())
+                return false;
+            for (int i = 0; i < l.size(); i++)
+                if (!isDeepEqual(nullValue(l.get(i)), nullValue(r.get(i))))
+                    return false;
+            return true;
+        }
+        if (lhs instanceof Map && rhs instanceof Map) {
+            Map<?, ?> l = (Map<?, ?>) lhs, r = (Map<?, ?>) rhs;
+            if (l.size() != r.size() || !l.keySet().equals(r.keySet()))
+                return false;
+            for (Map.Entry<?, ?> e : l.entrySet())
+                if (!isDeepEqual(nullValue(e.getValue()), nullValue(r.get(e.getKey()))))
+                    return false;
+            return true;
+        }
+        return lhs.equals(rhs);
+    }
+
+    /**
+     * Returns a key whose equals/hashCode is consistent with {@link #isDeepEqual(Object, Object)}
+     * (numbers normalized to Double, -0.0 to 0.0, Java null to NULL_VALUE).
+     */
+    public static Object deepEqualKey(Object o) {
+        if (o == null)
+            return Jsonata.NULL_VALUE;
+        if (o instanceof Number) {
+            double d = ((Number) o).doubleValue();
+            return d == 0 ? 0.0d : d;
+        }
+        if (o instanceof List) {
+            List<Object> l = new ArrayList<>(((List<?>) o).size());
+            for (Object x : (List<?>) o)
+                l.add(deepEqualKey(x));
+            return l;
+        }
+        if (o instanceof Map) {
+            Map<Object, Object> m = new java.util.HashMap<>();
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) o).entrySet())
+                m.put(e.getKey(), deepEqualKey(e.getValue()));
+            return m;
+        }
+        return o;
+    }
+
+    /** Java null inside input structures represents JSON null */
+    private static Object nullValue(Object o) {
+        return o == null ? Jsonata.NULL_VALUE : o;
+    }
+
+    /**
+     * Formats a double exactly like ECMAScript Number.prototype.toString
+     * (shortest round-trip digits, plain notation for 1e-7 &lt; |d| &lt; 1e21, otherwise "1e+21" style).
+     */
+    public static String jsNumberToString(double d) {
+        if (Double.isNaN(d)) return "NaN";
+        if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+        if (d == 0) return "0";
+        String sign = d < 0 ? "-" : "";
+        // Double.toString gives the shortest uniquely identifying digits (JDK 19+, JDK-4511638);
+        // on older JDKs the result may contain one superfluous digit in rare cases
+        java.math.BigDecimal bd = new java.math.BigDecimal(Double.toString(Math.abs(d))).stripTrailingZeros();
+        if (bd.precision() == 2) {
+            // Double.toString always prints two digits in E notation (4.9E-324); JS prints 5e-324
+            java.math.BigDecimal one = bd.round(new java.math.MathContext(1, java.math.RoundingMode.HALF_EVEN));
+            if (one.doubleValue() == Math.abs(d))
+                bd = one.stripTrailingZeros();
+        }
+        String digits = bd.unscaledValue().toString();
+        int k = digits.length();
+        int n = k - bd.scale();
+        StringBuilder b = new StringBuilder(sign);
+        if (k <= n && n <= 21) {
+            b.append(digits);
+            for (int z = 0; z < n - k; z++) b.append('0');
+        } else if (0 < n && n <= 21) {
+            b.append(digits, 0, n).append('.').append(digits, n, k);
+        } else if (-6 < n && n <= 0) {
+            b.append("0.");
+            for (int z = 0; z < -n; z++) b.append('0');
+            b.append(digits);
+        } else {
+            int e = n - 1;
+            b.append(digits.charAt(0));
+            if (k > 1) b.append('.').append(digits, 1, k);
+            b.append('e').append(e < 0 ? '-' : '+').append(Math.abs(e));
+        }
+        return b.toString();
+    }
+
+    /**
+     * Formats an integral double exactly like ECMAScript Number.prototype.toString(radix)
+     * (V8 DoubleToRadixCString: digits beyond the precision of the double are zeros).
+     */
+    public static String jsIntegerToString(double value, int radix) {
+        if (radix == 10 || Double.isNaN(value) || Double.isInfinite(value))
+            return jsNumberToString(value);
+        if (value % 1 != 0)
+            throw new IllegalArgumentException("not an integer: " + value);
+        final String chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+        boolean negative = value < 0;
+        double integer = Math.abs(value);
+        StringBuilder b = new StringBuilder();
+        // fill unrepresented digits with zero
+        while (Math.getExponent(integer / radix) - 52 > 0) {
+            integer /= radix;
+            b.append('0');
+        }
+        do {
+            double remainder = integer % radix;
+            b.append(chars.charAt((int) remainder));
+            integer = (integer - remainder) / radix;
+        } while (integer > 0);
+        if (negative)
+            b.append('-');
+        return b.reverse().toString();
+    }
+
     public static boolean isFunction(Object o) {
         return o instanceof JFunction || o instanceof JFunctionCallable;
     }
@@ -285,8 +418,10 @@ public class Utils {
               w.append("\\r");
               break;
           default:
-              if (c < ' ' || (c >= '\u0080' && c < '\u00a0')
-                      || (c >= '\u2000' && c < '\u2100')) {
+              // like JSON.stringify: escape control characters and lone surrogates only
+              boolean lone = Character.isHighSurrogate(c) ? !(i + 1 < len && Character.isLowSurrogate(string.charAt(i + 1)))
+                      : Character.isLowSurrogate(c) && !(i > 0 && Character.isHighSurrogate(string.charAt(i - 1)));
+              if (c < ' ' || lone) {
                   w.append("\\u");
                   hhhh = Integer.toHexString(c);
                   w.append("0000", 0, 4 - hhhh.length());
@@ -316,6 +451,10 @@ public class Utils {
         if (aa instanceof String)
             return ((Comparable)aa).compareTo(bb);
         else
-            return Double.compare(((Number)aa).doubleValue(), ((Number)bb).doubleValue());
+        {
+            // like JS < and >: numbers of any Java type by value, -0 equals 0
+            double a = ((Number)aa).doubleValue(), b = ((Number)bb).doubleValue();
+            return a < b ? -1 : (a > b ? 1 : 0);
+        }
     }
 }

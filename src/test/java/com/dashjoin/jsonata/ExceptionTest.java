@@ -23,7 +23,8 @@ public class ExceptionTest {
       expr.evaluate(null);
       Assertions.fail();
     } catch (JException e) {
-      Assertions.assertEquals("Number out of range: \"Infinity\"", e.getMessage());
+      // jsonata-js: JSON.stringify(Infinity) is null
+      Assertions.assertEquals("Number out of range: null", e.getMessage());
     }
   }
   

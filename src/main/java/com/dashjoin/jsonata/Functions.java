@@ -27,16 +27,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -44,13 +35,13 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.regex.MatchResult;
@@ -63,6 +54,11 @@ import com.dashjoin.jsonata.Utils.JList;
 import com.dashjoin.jsonata.json.Json;
 import com.dashjoin.jsonata.utils.Constants;
 import com.dashjoin.jsonata.utils.DateTimeUtils;
+import com.dashjoin.jsonata.utils.FormatInteger;
+import com.dashjoin.jsonata.utils.FormatNumber;
+import com.dashjoin.jsonata.utils.JsDate;
+import com.dashjoin.jsonata.utils.JsRegex;
+import com.dashjoin.jsonata.utils.UriCodec;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class Functions {
@@ -78,7 +74,10 @@ public class Functions {
             return null;
         }
 
-        double total = args.stream().mapToDouble(Number::doubleValue).sum();
+        // plain left-to-right double addition like jsonata-js (DoubleStream.sum compensates errors)
+        double total = 0;
+        for (Number n : args)
+            total += n.doubleValue();
         return total;
     }
 
@@ -143,11 +142,11 @@ public class Functions {
             return null;
         }
 
-        OptionalDouble res = args.stream().mapToDouble(Number::doubleValue).average();
-        if (res.isPresent())
-            return res.getAsDouble();
-        else
-            return null;
+        // plain sum / count like jsonata-js (DoubleStream.average compensates rounding errors)
+        double total = 0;
+        for (Number n : args)
+            total += n.doubleValue();
+        return total / args.size();
     }
 
     /**
@@ -168,6 +167,10 @@ public class Functions {
         // see https://docs.jsonata.org/string-functions#string: Strings are unchanged
         if (arg instanceof String)
           return (String) arg;
+
+        // NaN (e.g. from $parseInteger)
+        if (arg instanceof Number && !Double.isFinite(((Number) arg).doubleValue()))
+          throw new JException("D3001", -1, arg);
         
         StringBuilder sb = new StringBuilder();
         string(sb, arg, prettify!=null && prettify, "");
@@ -194,22 +197,17 @@ public class Functions {
             return;
         }
 
-        if (arg instanceof Double) {
-          double d = ((Double)arg).doubleValue();
-          if (d % 1 == 0 && Long.MIN_VALUE < d && d <= Long.MAX_VALUE) {
-              b.append(Math.round(d)); return;
+        if (arg instanceof Double || arg instanceof Float) {
+          // jsonata-js: integers as String(n), other numbers as Number(n.toPrecision(15)),
+          // both formatted like ECMAScript Number#toString (plain digits below 1e21)
+          double d = ((Number)arg).doubleValue();
+          if (!Double.isFinite(d)) {
+            // JSON.stringify
+            b.append("null"); return;
           }
-            
-          // TODO: this really should be in the jackson serializer
-          BigDecimal bd = new BigDecimal((Double)arg, new MathContext(15));
-          String res = bd.stripTrailingZeros().toString();
-          
-          if (res.indexOf("E+") > 0)
-            res = res.replace("E+", "e+");
-          if (res.indexOf("E-") > 0)
-            res = res.replace("E-", "e-");
-          
-            b.append(res); return;
+          if (d % 1 != 0)
+            d = new BigDecimal(d, new MathContext(15)).doubleValue();
+          b.append(Utils.jsNumberToString(d)); return;
         }
 
         if (arg instanceof Number || arg instanceof Boolean) {
@@ -222,6 +220,9 @@ public class Functions {
         }
 
         if (arg instanceof Map) {
+            if (((Map) arg).isEmpty()) {
+                b.append("{}"); return;
+            }
             b.append('{');
             if (prettify)
                 b.append('\n');
@@ -359,24 +360,42 @@ public class Functions {
             return null;
         }
 
-        Integer start = _start!=null ? _start.intValue() : null;
-        Integer length = _length!=null ? _length.intValue() : null;
-
-        // not used: var strArray = stringToArray(str);
-        var strLength = str.length();
+        // jsonata-js: operate on code points (Array.from), slice semantics for start/end
+        int[] strArray = str.codePoints().toArray();
+        int strLength = strArray.length;
+        double start = _start != null ? _start.doubleValue() : 0;
 
         if (strLength + start < 0) {
             start = 0;
         }
 
-        if (length != null) {
+        if (_length != null) {
+            double length = _length.doubleValue();
             if (length <= 0) {
                 return "";
             }
-            return substr(str, start, length);
+            double end = start >= 0 ? start + length : strLength + start + length;
+            return slice(strArray, start, end);
         }
 
-        return substr(str, start, strLength);
+        return slice(strArray, start, strLength);
+    }
+
+    /** Array.prototype.slice(start, end).join('') on code points */
+    static String slice(int[] cps, double start, double end) {
+        int from = sliceIndex(start, cps.length), to = sliceIndex(end, cps.length);
+        if (from >= to)
+            return "";
+        return new String(cps, from, to - from);
+    }
+
+    static int sliceIndex(double x, int len) {
+        if (Double.isNaN(x))
+            return 0;
+        double t = x < 0 ? Math.ceil(x) : Math.floor(x);
+        if (t < 0)
+            return (int) Math.max(len + t, 0);
+        return (int) Math.min(t, len);
     }
 
 
@@ -655,41 +674,79 @@ public class Functions {
         return str.concat(substr(padding, 0, pads));
     }
 
-    static class RegexpMatch {
-        String match;
-        int index;
-        List<String> groups;
-        @Override public String toString() {
-            return "regexpMatch "+match+" idx="+index+" groups="+groups;
-        }
+    /**
+     * The jsonata-js regex matcher closure: function(str, fromIndex) returning
+     * {match, start, end, groups, next} or undefined. Like jsonata-js, a regex that matches a
+     * zero-length string raises D1004 when iterating (next()).
+     */
+    public static Map regexMatch(Pattern re, String str, int fromIndex) {
+        Matcher m = re.matcher(str);
+        if (fromIndex > str.length() || !m.find(Math.max(fromIndex, 0)))
+            return null;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("match", m.group());
+        result.put("start", m.start());
+        result.put("end", m.end());
+        List<Object> groups = new ArrayList<>();
+        for (int g = 1; g <= m.groupCount(); g++)
+            groups.add(m.group(g));
+        result.put("groups", groups);
+        // JS RegExp.exec with the 'g' flag: lastIndex = end of match (not advanced for empty matches)
+        final int lastIndex = m.end();
+        result.put("next", (Jsonata.Fn0<Object>) () -> {
+            if (lastIndex >= str.length())
+                return null;
+            Map next = regexMatch(re, str, lastIndex);
+            if (next != null && "".equals(next.get("match"))) {
+                // matches zero length string; this will never progress
+                throw new JException("D1004", -1, com.dashjoin.jsonata.utils.JsRegex.source(re));
+            }
+            return next;
+        });
+        return result;
     }
+
     /**
      * Evaluate the matcher function against the str arg
      *
-     * @param {*} matcher - matching function (native or lambda)
+     * @param {*} matcher - matching function (native or lambda) or a regex
      * @param {string} str - the string to match against
      * @returns {object} - structure that represents the match(es)
      */
-    public static List<RegexpMatch> evaluateMatcher(Pattern matcher, String str) {
-        List<RegexpMatch> res = new ArrayList<>();
-        Matcher m = matcher.matcher(str);
-        while (m.find()) {
-            RegexpMatch rm = new RegexpMatch();
-
-            //System.out.println("grc="+m.groupCount()+" "+m.group(1));
-
-            rm.index = m.start();
-            rm.match = m.group();
-
-            List<String> groups = new ArrayList<>();
-            // Collect the groups
-            for (int g=1; g<=m.groupCount(); g++)
-                groups.add(m.group(g));
-
-            rm.groups = groups;
-            res.add(rm);
+    static Map evaluateMatcher(Object matcher, Object str) throws Throwable {
+        Object result;
+        if (matcher instanceof Pattern)
+            result = str instanceof String ? regexMatch((Pattern) matcher, (String) str, 0) : null;
+        else if (matcher instanceof Jsonata.Fn0)
+            result = ((Jsonata.Fn0) matcher).get();
+        else {
+            List<Object> args = new ArrayList<>();
+            if (str != NO_ARG)
+                args.add(str);
+            result = funcApply(matcher, args);
         }
-        return res;
+        if (result == null || result == Jsonata.NULL_VALUE)
+            return null;
+        if (!(result instanceof Map) || !(((Map) result).get("start") instanceof Number
+                || ((Map) result).get("end") instanceof Number || ((Map) result).get("groups") instanceof List
+                || Utils.isFunction(((Map) result).get("next")) || isLambda(((Map) result).get("next")))) {
+            // the matcher function didn't return the correct structure
+            throw new JException("T1010", -1);
+        }
+        return (Map) result;
+    }
+
+    static final Object NO_ARG = new Object();
+
+    static Map nextMatch(Map matches) throws Throwable {
+        Object next = matches.get("next");
+        if (next == null)
+            return null;
+        return evaluateMatcher(next, NO_ARG);
+    }
+
+    static int intOf(Object n) {
+        return ((Number) n).intValue();
     }
 
     /**
@@ -698,7 +755,7 @@ public class Functions {
      * @param {String} token - substring or regex to find
      * @returns {Boolean} - true if str contains token
      */
-    public static Boolean contains(String str, Object token) {
+    public static Boolean contains(String str, Object token) throws Throwable {
         // undefined inputs always return undefined
         if (str == null || token == null) {
             return null;
@@ -708,14 +765,9 @@ public class Functions {
 
         if (token instanceof String) {
             result = (str.indexOf((String)token) != -1);
-        } else if (token instanceof Pattern) {
-            var matches = evaluateMatcher((Pattern)token, str);
-            //if (dbg) System.out.println("match = "+matches);
-            //result = (typeof matches !== 'undefined');
-            //throw new Error("regexp not impl"); //result = false;
-            result = !matches.isEmpty();
         } else {
-            throw new Error("unknown type to match: "+token);
+            var matches = evaluateMatcher(token, str);
+            result = matches != null;
         }
 
         return result;
@@ -728,34 +780,31 @@ public class Functions {
      * @param {Integer} [limit] - max number of matches to return
      * @returns {Array} The array of match objects
      */
-    public static List<Map> match(String str, Pattern regex, Integer limit) {
+    public static List<Map> match(String str, Object regex, Number limit) throws Throwable {
         // undefined inputs always return undefined
         if (str == null) {
             return null;
         }
 
         // limit, if specified, must be a non-negative number
-        if (limit!=null && limit < 0) {
-            throw new JException("D3040", -1, limit
-            );
+        if (limit != null && limit.doubleValue() < 0) {
+            throw new JException("D3040", -1, limit);
         }
 
         var result = createSequence();
-        var matches = evaluateMatcher(regex, str);
-        int max = Integer.MAX_VALUE;
-        if (limit!=null)
-            max = limit;
 
-        for (int i=0; i < matches.size(); i++) {
-            Map m = new LinkedHashMap<>();
-            RegexpMatch rm = matches.get(i);
-            // Convert to JSON map:
-            m.put("match", rm.match);
-            m.put("index", rm.index);
-            m.put("groups", rm.groups);
-            result.add(m);
-            if (i>=max)
-                break;
+        if (limit == null || limit.doubleValue() > 0) {
+            int count = 0;
+            var matches = evaluateMatcher(regex, str);
+            while (matches != null && (limit == null || count < limit.doubleValue())) {
+                Map m = new LinkedHashMap<>();
+                m.put("match", matches.get("match"));
+                m.put("index", matches.get("start"));
+                m.put("groups", matches.get("groups"));
+                result.add(m);
+                matches = nextMatch(matches);
+                count++;
+            }
         }
         return (List)result;
     }
@@ -780,160 +829,141 @@ public class Functions {
         return String.join(separator, strs);
     }
 
-    static String safeReplacement(String in) {
-        // In JSONata and in Java the $ in the replacement test usually starts the insertion of a capturing group
-        // In order to replace a simple $ in Java you have to escape the $ with "\$"
-        // in JSONata you do this with a '$$'
-        // "\$" followed any character besides '<' and and digit into $ + this character  
-        return in.replaceAll("\\$\\$", "\\\\\\$")
-            .replaceAll("([^\\\\]|^)\\$([^0-9^<])", "$1\\\\\\$$2")
-            .replaceAll("\\$$", "\\\\\\$"); // allow $ at end
-    }
-
     /**
-     * Safe replaceAll
-     * 
-     * In Java, non-existing groups cause an exception.
-     * Ignore these non-existing groups (replace with "")
-     * 
-     * @param s
-     * @param pattern
-     * @param replacement
-     * @return
+     * Expands $0, $n and $$ in a replacement string like jsonata-js
      */
-    static String safeReplaceAll(String s, Pattern pattern, Object _replacement) {
-
-        if (!(_replacement instanceof String))
-            return safeReplaceAllFn(s, pattern, _replacement);
-
-        String replacement = (String)_replacement;
-
-        replacement = safeReplacement(replacement);
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        for (int i=0; i<10; i++) {
-            try {
-                r = m.replaceAll(replacement);
-                break;
-            } catch (IndexOutOfBoundsException e) {
-                String msg = e.getMessage();
-
-                // Message we understand needs to be:
-                // No group X
-                if (!msg.contains("No group")) throw e;
-
-                // Adjust replacement to remove the non-existing group
-                String g = "" + msg.charAt(msg.length()-1);
-
-                replacement = replacement.replace("$"+g, "");
+    static String substitute(String replacement, Map regexMatch) {
+        List groups = (List) regexMatch.get("groups");
+        if (groups == null)
+            groups = List.of();
+        StringBuilder substitute = new StringBuilder();
+        // scan forward, copying the replacement text into the substitute string
+        // and replace any occurrence of $n with the values matched by the regex
+        int position = 0;
+        int index = replacement.indexOf('$', position);
+        while (index != -1 && position < replacement.length()) {
+            substitute.append(replacement, position, index);
+            position = index + 1;
+            char dollarVal = position < replacement.length() ? replacement.charAt(position) : 0;
+            if (dollarVal == '$') {
+                // literal $
+                substitute.append('$');
+                position++;
+            } else if (dollarVal == '0') {
+                substitute.append(regexMatch.get("match"));
+                position++;
+            } else {
+                int maxDigits;
+                if (groups.size() == 0) {
+                    // no sub-matches; any $ followed by a digit will be replaced by an empty string
+                    maxDigits = 1;
+                } else {
+                    // max number of digits to parse following the $
+                    maxDigits = (int) Math.floor(Math.log(groups.size()) * (1 / Math.log(10))) + 1;
+                }
+                Integer idx = parseIntPrefix(replacement.substring(position, Math.min(replacement.length(), position + maxDigits)));
+                if (maxDigits > 1 && idx != null && idx > groups.size()) {
+                    idx = parseIntPrefix(replacement.substring(position, Math.min(replacement.length(), position + maxDigits - 1)));
+                }
+                if (idx != null) {
+                    if (groups.size() > 0 && idx - 1 >= 0 && idx - 1 < groups.size()) {
+                        Object submatch = groups.get(idx - 1);
+                        if (submatch != null) {
+                            substitute.append(submatch);
+                        }
+                    }
+                    position += idx.toString().length();
+                } else {
+                    // not a capture group, treat the $ as literal
+                    substitute.append('$');
+                }
             }
+            index = replacement.indexOf('$', position);
         }
-        return r;
+        substitute.append(replacement.substring(Math.min(position, replacement.length())));
+        return substitute.toString();
+    }
+
+    /** JavaScript parseInt(s, 10) for the digit prefix of s (null for NaN) */
+    static Integer parseIntPrefix(String s) {
+        int i = 0;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9')
+            i++;
+        if (i == 0)
+            return null;
+        return Integer.valueOf(s.substring(0, i));
     }
 
     /**
-     * Converts Java MatchResult to the Jsonata object format
-     * @param mr
-     * @return
+     * Match a string with a regex returning an array of object containing details of each match
+     * @param {String} str - string
+     * @param {String} pattern - the substring/regex applied to the string
+     * @param {String} replacement - text to replace the matched substrings
+     * @param {Integer} [limit] - max number of matches to return
+     * @returns {Array} The array of match objects
      */
-    static Map toJsonataMatch(MatchResult mr) {
-        Map obj = new LinkedHashMap<>();
-        obj.put("match", mr.group());
-
-        List groups = new ArrayList<>();
-        for (int i=0; i<=mr.groupCount(); i++)
-            groups.add(mr.group(i));
-
-        obj.put("groups", groups);
-
-        return obj;
-    }
-
-    /**
-     * Regexp Replace with replacer function
-     * @param s
-     * @param pattern
-     * @param fn
-     * @return
-     */
-    static String safeReplaceAllFn(String s, Pattern pattern, Object fn) {
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        r = m.replaceAll(t -> { try {
-            Object res = funcApply(fn, List.of(toJsonataMatch(t)));
-            if (res instanceof String)
-                return (String)res;
-            else
-                return null;
-        } catch (Throwable e) {
-            e.printStackTrace();
-        }
-        return null;
-        });
-        return r;
-    }
-
-    /**
-     * Safe replaceFirst
-     * 
-     * @param s
-     * @param pattern
-     * @param replacement
-     * @return
-     */
-    static String safeReplaceFirst(String s, Pattern pattern, String replacement) {
-        replacement = safeReplacement(replacement);
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        for (int i=0; i<10; i++) {
-            try {
-                r = m.replaceFirst(replacement);
-                break;
-            } catch (IndexOutOfBoundsException e) {
-                String msg = e.getMessage();
-
-                // Message we understand needs to be:
-                // No group X
-                if (!msg.contains("No group")) throw e;
-
-                // Adjust replacement to remove the non-existing group
-                String g = "" + msg.charAt(msg.length()-1);
-
-                replacement = replacement.replace("$"+g, "");
-            }
-        }
-        return r;
-    }
-
-    public static String replace(String str, Object pattern, Object replacement, Integer limit) {
+    public static String replace(String str, Object pattern, Object replacement, Number limit) throws Throwable {
+        // undefined inputs always return undefined
         if (str == null || pattern == null) {
             return null;
         }
-        if (pattern instanceof String)
-          if (((String)pattern).isEmpty())
-            throw new JException("Second argument of replace function cannot be an empty string", 0);
-        if (limit == null) {
-          if (pattern instanceof String) {
-              return str.replace((String)pattern, (String)replacement);
-          } else {
-              return safeReplaceAll(str, (Pattern)pattern, replacement);
-          }
-        } else {
-          
-          if (limit<0)
-            throw new JException("Fourth argument of replace function must evaluate to a positive number", 0);
-          
-          for (int i=0; i<limit; i++)
-            if (pattern instanceof String) {
-                str = str.replaceFirst((String)pattern, (String)replacement);
-            } else {
-                str = safeReplaceFirst(str, (Pattern)pattern, (String)replacement);
-            }
-          return str;
+
+        // pattern cannot be an empty string
+        if ("".equals(pattern)) {
+            throw new JException("D3010", -1, pattern);
         }
+
+        // limit, if specified, must be a non-negative number
+        if (limit != null && limit.doubleValue() < 0) {
+            throw new JException("D3011", -1, limit);
+        }
+
+        StringBuilder result = new StringBuilder();
+        int position = 0;
+
+        if (limit == null || limit.doubleValue() > 0) {
+            int count = 0;
+            if (pattern instanceof String) {
+                String pat = (String) pattern;
+                int index = str.indexOf(pat, position);
+                while (index != -1 && (limit == null || count < limit.doubleValue())) {
+                    result.append(str, position, index);
+                    result.append(replacement);
+                    position = index + pat.length();
+                    count++;
+                    index = str.indexOf(pat, position);
+                }
+                result.append(str.substring(position));
+            } else {
+                var matches = evaluateMatcher(pattern, str);
+                if (matches != null) {
+                    while (matches != null && (limit == null || count < limit.doubleValue())) {
+                        int start = intOf(matches.get("start"));
+                        result.append(str, position, start);
+                        Object replacedWith = replacement instanceof String
+                                ? substitute((String) replacement, matches)
+                                : funcApply(replacement, new ArrayList<>(List.of(matches)));
+                        // check replacedWith is a string
+                        if (replacedWith instanceof String) {
+                            result.append(replacedWith);
+                        } else {
+                            // not a string - throw error
+                            throw new JException("D3012", -1, replacedWith);
+                        }
+                        position = start + ((String) matches.get("match")).length();
+                        count++;
+                        matches = nextMatch(matches);
+                    }
+                    result.append(str.substring(position));
+                } else {
+                    result.append(str);
+                }
+            }
+        } else {
+            result.append(str);
+        }
+        return result.toString();
     }
-
-
 
     /**
      * Base64 encode a string
@@ -979,20 +1009,7 @@ public class Functions {
      * @returns {string} Encoded string
      */
     public static String encodeUrlComponent(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        Utils.checkUrl(str);
-        
-        return URLEncoder.encode(str, StandardCharsets.UTF_8)
-                            .replaceAll("\\+", "%20")
-                            .replaceAll("\\%21", "!")
-                            .replaceAll("\\%27", "'")
-                            .replaceAll("\\%28", "(")
-                            .replaceAll("\\%29", ")")
-                            .replaceAll("\\%7E", "~");
+        return uriFunction("encodeUrlComponent", str);
     }
 
     /**
@@ -1001,52 +1018,8 @@ public class Functions {
      * @returns {string} Encoded string
      */
     public static String encodeUrl(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        Utils.checkUrl(str);
-        
-        try {
-          // only encode query part: https://docs.jsonata.org/string-functions#encodeurl
-          URL url = new URL(str);
-          String query = url.getQuery();
-          if (query != null) {
-              int offset = str.indexOf(query);
-              String strResult = str.substring(0, offset);
-              return strResult + encodeURI(query);
-          }
-        } catch (Exception e) {
-          // ignore and return default
-        }
-        return  URLEncoder.encode(str, StandardCharsets.UTF_8);
+        return uriFunction("encodeUrl", str);
     }
-
-    static String encodeURI(String uri) {
-      String result = null;
-      if (uri != null) {
-          try {
-              // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURI
-              // Not encoded: A-Z a-z 0-9 ; , / ? : @ & = + $ - _ . ! ~ * ' ( ) #
-              result = URLEncoder.encode(uri, "UTF-8").replaceAll("\\+", "%20")
-                  .replaceAll("%20", " ").replaceAll("\\%21", "!")
-                  .replaceAll("\\%23", "#").replaceAll("\\%24", "$")
-                  .replaceAll("\\%26", "&").replaceAll("\\%27", "'")
-                  .replaceAll("\\%28", "(").replaceAll("\\%29", ")")
-                  .replaceAll("\\%2A", "*").replaceAll("\\%2B", "+")
-                  .replaceAll("\\%2C", ",").replaceAll("\\%2D", "-")
-                  .replaceAll("\\%2E", ".").replaceAll("\\%2F", "/")
-                  .replaceAll("\\%3A", ":").replaceAll("\\%3B", ";")
-                  .replaceAll("\\%3D", "=").replaceAll("\\%3F", "?")
-                  .replaceAll("\\%40", "@").replaceAll("\\%5F", "_")
-                  .replaceAll("\\%7E", "~");
-          } catch (UnsupportedEncodingException e) {
-              e.printStackTrace();
-          }
-      }
-      return result;
-  }
 
     /**
      * Decode a string from a component for a url
@@ -1054,12 +1027,7 @@ public class Functions {
      * @returns {string} Decoded string
      */
     public static String decodeUrlComponent(String str) {
-        // undefined inputs always return undefined
-        if (str == null) {
-            return null;
-        }
-
-        return URLDecoder.decode(str, StandardCharsets.UTF_8);
+        return uriFunction("decodeUrlComponent", str);
     }
 
     /**
@@ -1068,42 +1036,70 @@ public class Functions {
      * @returns {string} Decoded string
      */
     public static String decodeUrl(String str) {
+        return uriFunction("decodeUrl", str);
+    }
+
+    /** ECMAScript URI functions as in jsonata-js; malformed input raises D3140 */
+    static String uriFunction(String name, String str) {
         // undefined inputs always return undefined
         if (str == null) {
             return null;
         }
-
-        return URLDecoder.decode(str, StandardCharsets.UTF_8);
+        try {
+            switch (name) {
+                case "encodeUrlComponent": return UriCodec.encodeURIComponent(str);
+                case "encodeUrl": return UriCodec.encodeURI(str);
+                case "decodeUrlComponent": return UriCodec.decodeURIComponent(str);
+                default: return UriCodec.decodeURI(str);
+            }
+        } catch (IllegalArgumentException e) {
+            throw new JException("D3140", -1, name, str);
+        }
     }
 
-    public static List<String> split(String str, Object pattern, Number limit) {
+    public static List<String> split(String str, Object pattern, Number limit) throws Throwable {
         if (str==null || pattern==null)
             return null;
 
-        if (limit!=null && limit.intValue()<0)
+        // limit, if specified, must be a non-negative number
+        if (limit!=null && limit.doubleValue()<0)
             throw new JException("D3020", -1, str);
 
         List<String> result = new ArrayList<>();
-        if (limit!=null && limit.intValue()==0)
-            return result;
 
-        if (pattern instanceof String) {
-            String sep = (String)pattern;
-            if (sep.isEmpty()) {
-                // $split("str", ""): Split string into characters
-                int l = limit!=null ? limit.intValue() : Integer.MAX_VALUE;
-                for (int i=0; i<str.length() && i<l; i++) {
-                    result.add( ""+str.charAt(i) );
+        if (limit == null || limit.doubleValue() > 0) {
+            if (pattern instanceof String) {
+                // JavaScript String.prototype.split(separator, limit)
+                String sep = (String)pattern;
+                long l = limit != null ? (long) limit.doubleValue() : Long.MAX_VALUE;
+                if (sep.isEmpty()) {
+                    for (int i=0; i<str.length() && i<l; i++)
+                        result.add(""+str.charAt(i));
+                } else {
+                    for (String part : str.split(Pattern.quote(sep), -1)) {
+                        if (result.size() >= l)
+                            break;
+                        result.add(part);
+                    }
                 }
             } else {
-                // Quote separator string + preserve trailing empty strings (-1)
-                result = Arrays.asList( str.split( Pattern.quote(sep), -1) );
+                int count = 0;
+                var matches = evaluateMatcher(pattern, str);
+                if (matches != null) {
+                    int start = 0;
+                    while (matches != null && (limit == null || count < limit.doubleValue())) {
+                        result.add(str.substring(start, intOf(matches.get("start"))));
+                        start = intOf(matches.get("end"));
+                        matches = nextMatch(matches);
+                        count++;
+                    }
+                    if (limit == null || count < limit.doubleValue()) {
+                        result.add(str.substring(start));
+                    }
+                } else {
+                    result.add(str);
+                }
             }
-        } else {
-            result = Arrays.asList( ((Pattern)pattern).split(str, -1) );
-        }
-        if (limit!=null && limit.intValue()<result.size()) {
-            result = result.subList(0, limit.intValue());
         }
         return result;
     }
@@ -1116,164 +1112,7 @@ public class Functions {
      * @returns {String} The formatted string
      */
     public static String formatNumber(Number value, String picture, Map options) {
-        // undefined inputs always return undefined
-        if (value == null) {
-            return null;
-        }
-        
-        if (picture != null) {
-          if (picture.contains(",,"))
-            throw new RuntimeException("The sub-picture must not contain two adjacent instances of the 'grouping-separator' character");
-          if (picture.indexOf('%') >= 0)
-            if (picture.indexOf('e') >= 0)
-                throw new RuntimeException("A sub-picture that contains a 'percent' or 'per-mille' character must not contain a character treated as an 'exponent-separator");
-        }
-        
-        DecimalFormatSymbols symbols = options==null ? new DecimalFormatSymbols(Locale.US) :
-            processOptionsArg(options);
-
-        // Create the formatter and format the number
-        DecimalFormat formatter = new DecimalFormat();
-        formatter.setDecimalFormatSymbols(symbols);
-        String fixedPicture = picture; //picture.replaceAll("9", "0");
-        for (char c='1'; c<='9'; c++)
-            fixedPicture = fixedPicture.replace(c, '0');
-
-        boolean littleE = false;
-        if (fixedPicture.contains("e")) {
-            fixedPicture = fixedPicture.replace("e", "E");
-            littleE = true;
-        }
-        //System.out.println("picture "+fixedPicture);
-        formatter.applyLocalizedPattern(fixedPicture);
-        String result = formatter.format(value);
-
-        if (littleE)
-            result = result.replace("E", "e");
-
-
-        return result;
-    }
-
-    // From JSONata4Java FormatNumberFunction
-    private static DecimalFormatSymbols processOptionsArg(Map argOptions) {
-        // Create the variable return
-        DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.US); // (DecimalFormatSymbols) Constants.DEFAULT_DECIMAL_FORMAT_SYMBOLS.clone();
-
-        // Iterate over the formatting character overrides
-        Iterator<String> fieldNames = argOptions.keySet().iterator();
-        while (fieldNames.hasNext()) {
-            var fieldName = fieldNames.next();
-            var valueNode = (String)argOptions.get(fieldName);
-            // String value = getFormattingCharacter(valueNode);
-            switch (fieldName) {
-                case Constants.SYMBOL_DECIMAL_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_DECIMAL_SEPARATOR, true);
-                    symbols.setDecimalSeparator(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_GROUPING_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_GROUPING_SEPARATOR, true);
-                    symbols.setGroupingSeparator(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_INFINITY: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_INFINITY, false);
-                    symbols.setInfinity(value);
-                    break;
-                }
-
-                case Constants.SYMBOL_MINUS_SIGN: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_MINUS_SIGN, true);
-                    symbols.setMinusSign(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_NAN: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_NAN, false);
-                    symbols.setNaN(value);
-                    break;
-                }
-
-                case Constants.SYMBOL_PERCENT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PERCENT, true);
-                    symbols.setPercent(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_PER_MILLE: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PER_MILLE, false);
-                    symbols.setPerMill(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_ZERO_DIGIT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_ZERO_DIGIT, true);
-                    symbols.setZeroDigit(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_DIGIT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_DIGIT, true);
-                    symbols.setDigit(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_PATTERN_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PATTERN_SEPARATOR, true);
-                    symbols.setPatternSeparator(value.charAt(0));
-                    break;
-                }
-
-                default: {
-                    //final String msg = String.format(Constants.ERR_MSG_INVALID_OPTIONS_UNKNOWN_PROPERTY,
-                    //    Constants.FUNCTION_FORMAT_NUMBER, fieldName);
-                    throw new RuntimeException("Error parsing formatNumber format string");
-                }
-            } // SWITCH
-        } // WHILE
-
-        return symbols;
-    }
-
-    // From JSONata4Java FormatNumberFunction
-    private static String getFormattingCharacter(String value, String propertyName, boolean isChar) {
-        // Create the variable to return
-        String formattingChar = null;
-
-        // Make sure that we have a valid node and that its content is textual
-        //if (valueNode != null && valueNode.isTextual()) {
-            // Read the value
-            //String value = valueNode.textValue();
-            if (value != null && !value.isEmpty()) {
-
-                // If the target property requires a single char, check the length
-                if (isChar) {
-                    if (value.length() == 1) {
-                        formattingChar = value;
-                    } else {
-                        //final String msg = String.format(Constants.ERR_MSG_INVALID_OPTIONS_SINGLE_CHAR,
-                        //    Constants.FUNCTION_FORMAT_NUMBER, propertyName);
-                        throw new RuntimeException();
-                    }
-                } else {
-                    formattingChar = value;
-                }
-            } else {
-                final String msgTemplate;
-                if (isChar) {
-                    msgTemplate = Constants.ERR_MSG_INVALID_OPTIONS_SINGLE_CHAR;
-                } else {
-                    msgTemplate = Constants.ERR_MSG_INVALID_OPTIONS_STRING;
-                }
-                //final String msg = String.format(msgTemplate, Constants.FUNCTION_FORMAT_NUMBER, propertyName);
-                throw new RuntimeException(msgTemplate);
-            }
-        //} 
-        
-        return formattingChar;
+        return FormatNumber.formatNumber(value, picture, options);
     }
 
     /**
@@ -1288,26 +1127,20 @@ public class Functions {
             return null;
         }
 
-        value = round(value, 0);
+        double v = FormatNumber.round(value.doubleValue(), 0);
 
-        int radix;
+        double radix;
         if (_radix == null) {
             radix = 10;
         } else {
-            radix = _radix.intValue();
+            radix = FormatNumber.round(_radix.doubleValue(), 0);
         }
 
         if (radix < 2 || radix > 36) {
-            throw new JException("D3100",
-                //stack: (new Error()).stack,
-                radix
-            );
-
+            throw new JException("D3100", -1, Utils.convertNumber(radix));
         }
 
-        var result = Long.toString(value.longValue(), radix);
-
-        return result;
+        return Utils.jsIntegerToString(v, (int) radix);
     }
 
     /**
@@ -1329,20 +1162,38 @@ public class Functions {
 
         if (arg instanceof Number)
             result = (Number)arg;
-        else if (arg instanceof String) {
-            String s = (String)arg;
-            if (s.startsWith("0x"))
-                result = Long.parseLong(s.substring(2), 16);
-            else if (s.startsWith("0B"))
-                result = Long.parseLong(s.substring(2), 2);
-            else if (s.startsWith("0O"))
-                result = Long.parseLong(s.substring(2), 8);
-            else
-                result = Double.valueOf((String)arg);
+        else if (arg instanceof String && DECIMAL.matcher((String)arg).matches()
+                && Double.isFinite(Double.parseDouble((String)arg))) {
+            result = Double.parseDouble((String)arg);
+        } else if (arg instanceof String && RADIX.matcher((String)arg).find()) {
+            // same (loosely anchored) regex as jsonata-js, then JavaScript Number(str)
+            result = jsNumberOfRadixLiteral((String)arg);
         } else if (arg instanceof Boolean) {
             result = ((boolean)arg) ? 1:0;
+        } else {
+            throw new JException("D3030", -1, arg);
         }
         return result;
+    }
+
+    static final Pattern DECIMAL = Pattern.compile("^-?[0-9]+(\\.[0-9]+)?([Ee][-+]?[0-9]+)?$");
+    static final Pattern RADIX = Pattern.compile("^(0[xX][0-9A-Fa-f]+)|(0[oO][0-7]+)|(0[bB][0-1]+)$");
+
+    /** JavaScript Number("0x1F" / "0o17" / "0b11"); anything else is NaN */
+    static Number jsNumberOfRadixLiteral(String s) {
+        String t = s.trim();
+        int radix = 0;
+        if (t.length() > 2 && t.charAt(0) == '0') {
+            char c = Character.toLowerCase(t.charAt(1));
+            radix = c == 'x' ? 16 : c == 'o' ? 8 : c == 'b' ? 2 : 0;
+        }
+        if (radix == 0)
+            return Double.NaN;
+        try {
+            return Utils.convertNumber(new java.math.BigInteger(t.substring(2), radix).doubleValue());
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
     }
 
     /**
@@ -1404,6 +1255,9 @@ public class Functions {
             return null;
         }
 
+        if (!Double.isFinite(arg.doubleValue()))
+            return Double.NaN;
+
         BigDecimal b = new BigDecimal(arg+"");
         if (precision==null)
             precision = 0;
@@ -1426,7 +1280,7 @@ public class Functions {
 
         if (arg.doubleValue() < 0) {
             throw new JException("D3060",
-                1,
+                -1,
                 arg
             );
         }
@@ -1451,7 +1305,7 @@ public class Functions {
 
         if (!Double.isFinite(result)) {
             throw new JException("D3061",
-                1,
+                -1,
                 arg,
                 exp
             );
@@ -1503,7 +1357,9 @@ public class Functions {
                 result = true;
             }
         } else if (arg instanceof Number) { //isNumeric(arg)) {
-            if (((Number)arg).doubleValue() != 0) {
+            double d = ((Number)arg).doubleValue();
+            // NaN is not numeric in jsonata-js and therefore false
+            if (d != 0 && !Double.isNaN(d)) {
                 result = true;
             }
         } else if (arg instanceof Map) {
@@ -1532,7 +1388,20 @@ public class Functions {
 
     public static int getFunctionArity(Object func) {
         if (func instanceof JFunction) {
-            return ((JFunction)func).signature.getMinNumberOfArgs();
+            JFunction f = (JFunction)func;
+            if (f.signature != null)
+                return f.signature.getMinNumberOfArgs();
+            // no signature: number of declared Java parameters if known, else the value only
+            return f.method != null ? f.getNumberOfArgs() : 1;
+        } else if (func instanceof Pattern) {
+            // regex matcher closure function(str, fromIndex)
+            return 2;
+        } else if (func instanceof Jsonata.Fn0) {
+            return 0;
+        } else if (func instanceof Jsonata.Fn2) {
+            return 2;
+        } else if (func instanceof Jsonata.JLambda) {
+            return 1;
         } else {
             // Lambda
             return ((Symbol)func).arguments.size();
@@ -1571,9 +1440,16 @@ public class Functions {
      */
     public static Object funcApply(Object func, List funcArgs) throws Throwable {
         Object res;
-        if (isLambda(func))
-            res = Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment);
-        else
+        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda || func instanceof Pattern) {
+            // like jsonata-js: native and host functions called from higher-order functions are
+            // validated against their signature (e.g. $map([null], $uppercase) -> T0410).
+            // Outside of an evaluation (another thread, after evaluate) a context is provided.
+            try {
+                res = Jsonata.withContext(() -> Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment));
+            } catch (RuntimeException | Error e) {
+                throw e;
+            }
+        } else
             res = ((JFunction)func).call(null, funcArgs);
         return res;
     }
@@ -1664,7 +1540,7 @@ public class Functions {
                     hasFoundMatch = true;
                 } else {
                     throw new JException("D3138",
-                        i
+                        -1
                     );
                 }
             }
@@ -1889,7 +1765,7 @@ public class Functions {
      */
     public static void error(String message) throws Throwable {
         throw new JException("D3137", -1,
-            message!=null ? message : "$error() function evaluated");
+            message!=null && !message.isEmpty() ? message : "$error() function evaluated");
     }
 
     /**
@@ -1901,7 +1777,7 @@ public class Functions {
      */
     public static void assertFn(boolean condition, String message) throws Throwable {
         if(!condition) {
-            throw new JException("D3141", -1, message!=null ? message : "$assert() statement failed");
+            throw new JException("D3141", -1, message!=null && !message.isEmpty() ? message : "$assert() statement failed");
 //                message: message || "$assert() statement failed"
         }
     }
@@ -1921,7 +1797,8 @@ public class Functions {
         }
 
         if (value instanceof Number) {
-            return "number";
+            // NaN is not numeric in jsonata-js
+            return Double.isNaN(((Number) value).doubleValue()) ? "object" : "number";
         }
 
         if (value instanceof String) {
@@ -1950,7 +1827,7 @@ public class Functions {
      * @param {*} comparator - comparator function
      * @returns {Array} - sorted array
      */
-    public static List sort(List arr, Object comparator) {
+    public static List sort(List arr, Object comparator) throws Throwable {
         // undefined inputs always return undefined
         if (arr == null) {
             return null;
@@ -1960,39 +1837,53 @@ public class Functions {
             return arr;
         }
 
-        List result = new ArrayList<>(arr);
-
-        if (comparator != null) {
-            Comparator comp = new Comparator() {
-
-                @Override
-                public int compare(Object o1, Object o2) {
-                    try {
-                        Boolean swap = toBoolean(funcApply(comparator, Arrays.asList(o1, o2)));
-                        // Symmetry/equality: if Jsonata comp(o1,o2)==comp(o2,o1) means Java o1==o2 (return 0)
-                        Boolean swapSym = toBoolean(funcApply(comparator, Arrays.asList(o2, o1)));
-                        if (swap != null && swap.equals(swapSym))
-                          return 0;
-                        if (swap == null)
-                          return 0;
-                        if (swap)
-                          return 1;
-                        else
-                          return -1;
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-                
+        // Same algorithm as jsonata-js (top-down merge sort, "swap if comparator returns true"),
+        // so that the result is identical even for comparators that are not a strict order
+        // (e.g. $l >= $r) and errors are raised for the same pair of values.
+        SwapFunction swap;
+        if (comparator == null) {
+            // inject a default comparator - only works for numeric or string arrays
+            if (!Utils.isArrayOfNumbers(arr) && !Utils.isArrayOfStrings(arr)) {
+                throw new JException("D3070", -1);
+            }
+            swap = (a, b) -> {
+                if (a instanceof Number)
+                    return ((Number) a).doubleValue() > ((Number) b).doubleValue();
+                return ((String) a).compareTo((String) b) > 0;
             };
-            if (comparator instanceof Comparator)
-              result.sort((Comparator)comparator);
-            else
-              result.sort((Comparator)comp);
+        } else if (comparator instanceof Comparator) {
+            // internal usage (order-by syntax): swap only if comp equals 1
+            Comparator c = (Comparator) comparator;
+            swap = (a, b) -> c.compare(a, b) > 0;
         } else {
-            result.sort(null);
+            swap = (a, b) -> Boolean.TRUE.equals(toBoolean(funcApply(comparator, Arrays.asList(a, b))));
         }
+        return msort(new ArrayList<>(arr), swap);
+    }
 
+    interface SwapFunction {
+        boolean swap(Object left, Object right) throws Throwable;
+    }
+
+    static List msort(List array, SwapFunction swap) throws Throwable {
+        if (array.size() <= 1)
+            return array;
+        int middle = array.size() / 2;
+        List left = msort(new ArrayList<>(array.subList(0, middle)), swap);
+        List right = msort(new ArrayList<>(array.subList(middle, array.size())), swap);
+        List result = new ArrayList<>(array.size());
+        int i = 0, j = 0;
+        while (i < left.size() && j < right.size()) {
+            if (swap.swap(left.get(i), right.get(j))) {
+                // if it returns true - swap left and right
+                result.add(right.get(j++));
+            } else {
+                // otherwise keep the same order
+                result.add(left.get(i++));
+            }
+        }
+        while (i < left.size()) result.add(left.get(i++));
+        while (j < right.size()) result.add(right.get(j++));
         return result;
     }
 
@@ -2032,13 +1923,15 @@ public class Functions {
         }
         List arr = (List)_arr;
 
-        var results = (arr instanceof JList/*sequence*/) ? createSequence() : new ArrayList<>();
+        var results = Utils.isSequence(arr) ? createSequence() : new ArrayList<>();
 
-        // Create distinct list of elements by adding all to a set,
-        // and then adding the set to the result
-        var set = new LinkedHashSet(arr.size());
-        set.addAll(arr);
-        results.addAll(set);
+        // keep the first occurrence of deep-equal values (jsonata-js deepEquals: numbers are
+        // compared by value regardless of Java type); normalized keys keep this O(n)
+        var seen = new HashSet<Object>();
+        for (Object value : arr) {
+            if (seen.add(Utils.deepEqualKey(value)))
+                results.add(value);
+        }
 
         return results;
     }
@@ -2103,6 +1996,13 @@ public class Functions {
         }
         if (!(arg2 instanceof List)) {
             arg2 = new JList<>(Arrays.asList(arg2));
+        }
+
+        // guardrail: maximum sequence length (jsonata-js 2.2, 91532d4)
+        int size = ((List)arg1).size() + ((List)arg2).size();
+        Jsonata.Options options = currentOptions();
+        if (options != null && options.sequence != null && size > options.sequence) {
+            throw new JException("D2015", -1, size);
         }
 
         // Shortcut:
@@ -2201,7 +2101,8 @@ public class Functions {
         
         try {
             Object res = m.invoke(null, callArgs.toArray());
-            if (res instanceof Number)
+            // NaN (e.g. from $parseInteger) is passed on like in jsonata-js
+            if (res instanceof Number && !(res instanceof Double && ((Double) res).isNaN()))
                 res = Utils.convertNumber((Number)res);
             return res;
         } catch (IllegalAccessException e) {
@@ -2227,41 +2128,31 @@ public class Functions {
      * @throws ParseException 
      * @returns {Number} - milliseconds since the epoch
      */
-    public static Long dateTimeToMillis(String timestamp, String picture) throws ParseException {
+    public static Number dateTimeToMillis(String timestamp, String picture) throws ParseException {
         // undefined inputs always return undefined
         if(timestamp == null) {
             return null;
         }
 
         if(picture == null) {
-          if (/*StringUtils.*/isNumeric(timestamp)) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy");
-            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-            return sdf.parse(timestamp).getTime();
-          }
-          try {
-            int len = timestamp.length();
-            if (len > 5)
-              if (timestamp.charAt(len-5) == '+' || timestamp.charAt(len-5) == '-')
-                if (Character.isDigit(timestamp.charAt(len-4)) && Character.isDigit(timestamp.charAt(len-3)) && Character.isDigit(timestamp.charAt(len-2)) && Character.isDigit(timestamp.charAt(len-1)) )
-                  timestamp = timestamp.substring(0, len-2) + ':' + timestamp.substring(len-2, len);
-            return OffsetDateTime.parse(timestamp).toInstant().toEpochMilli();
-          }
-          catch (RuntimeException e) {
-            try {
-              LocalDate ldt = LocalDate.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-              return ldt.atStartOfDay().atZone(ZoneId.of("UTC")).toInstant().toEpochMilli();
+            if (!ISO8601_REGEX.matcher(timestamp).matches()) {
+                throw new JException("D3110", -1, timestamp);
             }
-            catch (DateTimeParseException noZone) {
-              // Implementations usually default to the local time zone when the date string is non-standard
-              // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#non-standard_date_strings
-              return LocalDateTime.parse(timestamp).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            }
-          }
+            return jsTimeValue(JsDate.parse(timestamp));
         } else {
-            return DateTimeUtils.parseDateTime(timestamp, picture);
+            return DateTimeUtils.parseDateTime(timestamp, picture, Jsonata.current.get().timestamp);
         }
     }
+
+    /** Regular expression of jsonata-js 2.2.2 to match an ISO 8601 formatted timestamp */
+    private static final Pattern ISO8601_REGEX = JsRegex.compile(
+        "^\\d{4}(-[01]\\d)?(-[0-3]\\d)?(T[0-2]\\d:[0-5]\\d:[0-5]\\d)?(\\.\\d+)?([+-][0-2]\\d:?[0-5]\\d|Z)?$", false, false);
+
+    /** JavaScript time value (integral double or NaN) as JSONata number */
+    static Number jsTimeValue(double t) {
+        return Double.isNaN(t) ? (Number) Double.NaN : (Number) (long) t;
+    }
+
     // Adapted from: org.apache.commons.lang3.StringUtils
     public static boolean isNumeric(final CharSequence cs) {
         if (cs == null || cs.length() == 0) {
@@ -2289,7 +2180,7 @@ public class Functions {
             return null;
         }
 
-        return DateTimeUtils.formatDateTime(millis.longValue(), picture, timezone);
+        return DateTimeUtils.formatDateTime(millis.doubleValue(), picture, timezone);
     }
 
     /**
@@ -2300,66 +2191,17 @@ public class Functions {
      * @returns {string} - the formatted number
      */
     public static String formatInteger(Number value, String picture) {
-        if (value == null) {
-            return null;
-        }
-        return DateTimeUtils.formatInteger(value.longValue(), picture);
+        return FormatInteger.formatInteger(value, picture);
     }
 
     /**
      * parse a string containing an integer as specified by the picture string
      * @param {string} value - the string to parse
      * @param {string} picture - the picture string
-     * @throws ParseException
      * @returns {number} - the parsed number
      */
-    public static Number parseInteger(String value, String picture) throws ParseException, JException {
-        if (value == null) {
-            return null;
-        }
-
-        // const formatSpec = analyseIntegerPicture(picture);
-        // const matchSpec = generateRegex(formatSpec);
-        // //const fullRegex = '^' + matchSpec.regex + '$';
-        // //const matcher = new RegExp(fullRegex);
-        // // TODO validate input based on the matcher regex
-        // const result = matchSpec.parse(value);
-        // return result;
-        
-        if (picture != null) {
-          if (picture.equals("#"))
-            throw new ParseException("Formatting or parsing an integer as a sequence starting with \"#\" is not supported by this implementation", 0);
-          if (picture.endsWith(";o"))
-            picture = picture.substring(0, picture.length()-2);
-          if (picture.equals("a"))
-            return DateTimeUtils.lettersToDecimal(value, 'a');
-          if (picture.equals("A"))
-            return DateTimeUtils.lettersToDecimal(value, 'A');
-          if (picture.equals("i"))
-            return DateTimeUtils.romanToDecimal(value.toUpperCase());
-          if (picture.equals("I"))
-            return DateTimeUtils.romanToDecimal(value);
-          if (picture.equals("w"))
-            return DateTimeUtils.wordsToLong(value);
-          if (picture.equals("W") || picture.equals("wW") || picture.equals("Ww"))
-            return DateTimeUtils.wordsToLong(value.toLowerCase());
-          if (picture.indexOf(':') >= 0) {
-            value = value.replace(':', ',');
-            picture = picture.replace(':', ',');
-          }
-        }
-        
-        try {
-            DecimalFormat formatter = picture != null ? new DecimalFormat(picture, new DecimalFormatSymbols(Locale.US)) : new DecimalFormat();
-            return formatter.parse(value);
-        } catch (IllegalArgumentException ill) {
-            throw new ParseException("Formatting or parsing an integer as a sequence starting with \""+ picture +"\" is not supported by this implementation", 0);
-        } catch (Exception ex) {
-            // Ignore the exception, return null
-            // System.err.println("Exception in parseInteger (returning null): " + ex);
-            // ex.printStackTrace();
-            return null;
-        }
+    public static Number parseInteger(String value, String picture) {
+        return FormatInteger.parseInteger(value, picture);
     }
 
     /**
@@ -2404,8 +2246,7 @@ public class Functions {
         } catch(Throwable err) {
             // error parsing the expression passed to $eval
             //populateMessage(err);
-            throw new JException("D3120", -1
-            );
+            throw new JException("D3120", -1, err.getMessage());
         }
         Object result = null;
         try {
@@ -2413,8 +2254,7 @@ public class Functions {
         } catch(Throwable err) {
             // error evaluating the expression passed to $eval
             //populateMessage(err);
-            throw new JException("D3121", -1
-            );
+            throw new JException("D3121", -1, err.getMessage());
         }
 
         return result;
@@ -2424,22 +2264,36 @@ public class Functions {
     //      return datetime.fromMillis(timestamp.getTime(), picture, timezone);
     //  }, "<s?s?:s>"));
     public static String now(String picture, String timezone) {
-        long t = Jsonata.current.get().timestamp;
-        return dateTimeFromMillis(t, picture, timezone);
+        return dateTimeFromMillis(evaluationTime(), picture, timezone);
+    }
+
+    /** the timestamp of the current evaluation (jsonata-js: exec_env.timestamp) */
+    static long evaluationTime() {
+        Jsonata j = Jsonata.current.get();
+        if (j != null && j.environment != null && j.environment.base != null && j.environment.base.time != 0)
+            return j.environment.base.time;
+        return j != null ? j.timestamp : System.currentTimeMillis();
     }
 
     //  environment.bind("millis", defineFunction(function() {
     //      return timestamp.getTime();
     //  }, "<:n>"));
     public static long millis() {
-        long t = Jsonata.current.get().timestamp;
-        return t;
+        return evaluationTime();
     }
 
     /**
      * Creates a new sequence with guardrails of the current environment
      * @return
      */
+    /** guardrail options of the current evaluation, or null */
+    static Jsonata.Options currentOptions() {
+        Jsonata j = Jsonata.current.get();
+        if (j == null || j.environment == null || j.environment.base == null)
+            return null;
+        return j.environment.base.options;
+    }
+
     public static List<Object> createSequence() {
         return Jsonata.current.get().environment.base.createSequence();
     }
