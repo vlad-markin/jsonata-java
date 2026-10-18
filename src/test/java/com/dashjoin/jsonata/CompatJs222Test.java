@@ -482,4 +482,25 @@ public class CompatJs222Test {
         assertEquals("D3001", err("$string($parseInteger('ab', 'i'))"));
         assertEquals("[null]", jsonata("$string([$parseInteger('ab', 'i')])").evaluate(null));
     }
+
+    /** NUM-06: $formatBase and the range operator compute with doubles like jsonata-js. */
+    @Test
+    public void num06_formatBaseAndRangeBeyondLong() {
+        assertEquals("1e+22", jsonata("$formatBase(1e22)").evaluate(null));
+        assertEquals("21e19e0c9bab2400000", jsonata("$formatBase(1e22, 16)").evaluate(null));
+        assertEquals("20000000000000", jsonata("$formatBase(9007199254740993, 16)").evaluate(null));
+        assertEquals("2", jsonata("$formatBase(2.5)").evaluate(null));
+        assertEquals("4", jsonata("$formatBase(3.5)").evaluate(null));
+        assertEquals("2s", jsonata("$formatBase(100, 36.5)").evaluate(null));
+        assertEquals("1100100", jsonata("$formatBase(100, 1.5)").evaluate(null));
+        assertEquals("D3100", err("$formatBase(100, 1.4)"));
+        assertEquals("D3100", err("$formatBase(100, 37)"));
+        assertEquals(0, jsonata("[1e20..5] ~> $count").evaluate(null));
+        assertEquals("T2004", err("[1e22..2.5]"));
+        assertEquals("T2003", err("[2.5..1e22]"));
+        assertEquals("D2014", err("[1..1e22]"));
+        assertEquals("D2014", err("[-1e22..1]"));
+        JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("[1..2.5]").evaluate(null));
+        assertEquals(4, e.getLocation());
+    }
 }

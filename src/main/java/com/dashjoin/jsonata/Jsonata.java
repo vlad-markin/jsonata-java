@@ -694,7 +694,14 @@ public class Jsonata {
                     result = evaluateStringConcat(lhs, rhs);
                     break;
                 case "..":
-                    result = evaluateRangeExpression(lhs, rhs);
+                    try {
+                        result = evaluateRangeExpression(lhs, rhs);
+                    } catch (JException jex) {
+                        // like jsonata-js evaluateBinary
+                        jex.location = expr.position;
+                        jex.current = op;
+                        throw jex;
+                    }
                     break;
                 case "in":
                     result = evaluateIncludesExpression(lhs, rhs);
@@ -1279,16 +1286,15 @@ public class Jsonata {
     Object evaluateRangeExpression(Object lhs, Object rhs) {
         Object result = null;
 
-        if (lhs != null && (!(lhs instanceof Long) && !(lhs instanceof Integer))) {
+        // jsonata-js: Number.isInteger (doubles, also beyond the long range)
+        if (lhs != null && !isInteger(lhs)) {
             throw new JException("T2003",
-                //stack: (new Error()).stack,
                 -1,
                 lhs
             );
         }
-        if (rhs != null && (!(rhs instanceof Long) && !(rhs instanceof Integer))) {
+        if (rhs != null && !isInteger(rhs)) {
             throw new JException("T2004",
-            //stack: (new Error()).stack,
             -1,
             rhs
             );
@@ -1299,7 +1305,7 @@ public class Jsonata {
             return result;
         }
 
-        long _lhs = ((Number)lhs).longValue(), _rhs = ((Number)rhs).longValue();
+        double _lhs = ((Number)lhs).doubleValue(), _rhs = ((Number)rhs).doubleValue();
 
         if (_lhs > _rhs) {
             // if the lhs is greater than the rhs, return undefined
@@ -1309,21 +1315,44 @@ public class Jsonata {
         // limit the size of the array to ten million entries (1e7)
         // this is an implementation defined limit to protect against
         // memory and performance issues.  This value may increase in the future.
-        var size = _rhs - _lhs + 1;
+        double size = _rhs - _lhs + 1;
         if(size > 1e7) {
             throw new JException("D2014",
-                //stack: (new Error()).stack,
                 -1,
-                size
+                Utils.convertNumber(size)
             );
         }
         if(environment.base.options!=null && environment.base.options.sequence!=null && size > environment.base.options.sequence) {
             throw new JException("D2015",
                 -1,
-                size
+                Utils.convertNumber(size)
             );
         }
-        return new Utils.RangeList(_lhs, _rhs);
+        if (_rhs >= 9007199254740992.0) {
+            // jsonata-js increments the items with item++, which gets stuck at 2^53
+            // (2^53 + 1 is not representable) until the array exceeds its maximum length
+            throw new IllegalArgumentException("Invalid array length");
+        }
+        if (_lhs < -9007199254740992.0) {
+            // beyond the safe integer range: increment like jsonata-js
+            List<Object> items = new ArrayList<>();
+            for (double item = _lhs; item <= _rhs; ) {
+                items.add(Utils.convertNumber(item));
+                double next = item + 1;
+                if (next == item)
+                    throw new IllegalArgumentException("Invalid array length");
+                item = next;
+            }
+            return items;
+        }
+        return new Utils.RangeList((long) _lhs, (long) _rhs);
+    }
+
+    private static boolean isInteger(Object n) {
+        if (!(n instanceof Number))
+            return false;
+        double d = ((Number) n).doubleValue();
+        return Double.isFinite(d) && Math.floor(d) == d;
     }
  
     /**

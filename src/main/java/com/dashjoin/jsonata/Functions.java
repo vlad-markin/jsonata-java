@@ -1133,26 +1133,20 @@ public class Functions {
             return null;
         }
 
-        value = round(value, 0);
+        double v = FormatNumber.round(value.doubleValue(), 0);
 
-        int radix;
+        double radix;
         if (_radix == null) {
             radix = 10;
         } else {
-            radix = _radix.intValue();
+            radix = FormatNumber.round(_radix.doubleValue(), 0);
         }
 
         if (radix < 2 || radix > 36) {
-            throw new JException("D3100", -1,
-                //stack: (new Error()).stack,
-                radix
-            );
-
+            throw new JException("D3100", -1, Utils.convertNumber(radix));
         }
 
-        var result = Long.toString(value.longValue(), radix);
-
-        return result;
+        return Utils.jsIntegerToString(v, (int) radix);
     }
 
     /**

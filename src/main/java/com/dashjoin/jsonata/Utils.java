@@ -169,6 +169,34 @@ public class Utils {
         return b.toString();
     }
 
+    /**
+     * Formats an integral double exactly like ECMAScript Number.prototype.toString(radix)
+     * (V8 DoubleToRadixCString: digits beyond the precision of the double are zeros).
+     */
+    public static String jsIntegerToString(double value, int radix) {
+        if (radix == 10 || Double.isNaN(value) || Double.isInfinite(value))
+            return jsNumberToString(value);
+        if (value % 1 != 0)
+            throw new IllegalArgumentException("not an integer: " + value);
+        final String chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+        boolean negative = value < 0;
+        double integer = Math.abs(value);
+        StringBuilder b = new StringBuilder();
+        // fill unrepresented digits with zero
+        while (Math.getExponent(integer / radix) - 52 > 0) {
+            integer /= radix;
+            b.append('0');
+        }
+        do {
+            double remainder = integer % radix;
+            b.append(chars.charAt((int) remainder));
+            integer = (integer - remainder) / radix;
+        } while (integer > 0);
+        if (negative)
+            b.append('-');
+        return b.reverse().toString();
+    }
+
     public static boolean isFunction(Object o) {
         return o instanceof JFunction || o instanceof JFunctionCallable;
     }
