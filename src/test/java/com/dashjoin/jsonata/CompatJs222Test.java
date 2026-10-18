@@ -657,4 +657,11 @@ public class CompatJs222Test {
         assertEquals("9007199254740992", jsonata("$string(n)").evaluate(Map.of("n", 9007199254740993L)));
         assertEquals("[12345678901234567000]", jsonata("$string([n])").evaluate(Map.of("n", 12345678901234567890d)));
     }
+
+    /** ERR-01: an error raised while applying a function (e.g. in a $sort comparator) is reported at the call. */
+    @Test
+    public void err01_positionOfFunctionCall() {
+        assertEquals(6, ex("$sort([1, 'a'], function($l,$r){$l > $r})", null).getLocation());
+        assertEquals(8, ex("$reduce(['a','b'], function($a, $b){$a * $b})", null).getLocation());
+    }
 }

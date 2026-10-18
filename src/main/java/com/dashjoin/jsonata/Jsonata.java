@@ -1800,8 +1800,10 @@ public class Jsonata {
              }
              result = /* await */ apply(proc, evaluatedArgs, input, environment);
          } catch (JException jex) {
-            if (jex.location<0) {
-                // add the position field to the error
+            if (jex.location<0 || proc instanceof Symbol || proc instanceof JFunction) {
+                // add the position field to the error; like jsonata-js applyInner
+                // (err.position = proc.position), an error raised while applying a lambda or a
+                // native/registered function is reported at the position of this call
                 jex.location = expr.position;
             }
             if (jex.current==null) {
