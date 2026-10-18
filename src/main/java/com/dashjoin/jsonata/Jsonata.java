@@ -2450,6 +2450,7 @@ public class Jsonata {
         put("T2012", "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}");
         put("T2013", "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.");
         put("D2014", "The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {{value}}.");
+        put("U1001", "{{{message}}}");
         put("D2015", "The maximum sequence length of {{value}} was exceeded.");
         put("D2016", "The size of the string requested by the $pad function must not exceed 1e7.  Attempted to allocate {{value}}.");
         put("D3001", "Attempting to invoke string Object on Infinity or NaN");

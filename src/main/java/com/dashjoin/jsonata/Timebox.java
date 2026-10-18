@@ -28,12 +28,24 @@ public class Timebox {
     long timeout = 5000L;
     int maxDepth = 100;
 
-    long time = System.currentTimeMillis();
+    /** state of the evaluation currently running on this thread (identified by its base frame) */
+    static final class State {
+        Frame base;
+        long time;
+        int depth;
+    }
+
+    final ThreadLocal<State> state = ThreadLocal.withInitial(State::new);
+
+    /** depth of the last evaluation step on any thread (kept for diagnostics and tests) */
     int depth = 0;
 
     /**
      * Protect the process/browser from a runnaway expression
      * i.e. Infinite loop (tail recursion), or excessive stack growth
+     *
+     * Like the timebox of the jsonata-js test-suite: the time limit applies to each evaluation
+     * (measured from its start, also when the frame is reused) and violations raise U1001.
      *
      * @param {Object} expr - expression to protect
      * @param {Number} timeout - max time in ms
@@ -50,30 +62,39 @@ public class Timebox {
         // register callbacks
         expr.setEvaluateEntryCallback( (_exp, _input, _env)-> {
             if (_env.isParallelCall) return;
-            depth++;
-            checkRunnaway();
+            State st = current(_env);
+            depth = ++st.depth;
+            checkRunnaway(st);
         });
         expr.setEvaluateExitCallback( (_exp, _input, _env, _res)-> {
             if (_env.isParallelCall) return;
-            depth--;
-            checkRunnaway();
+            State st = current(_env);
+            depth = --st.depth;
+            checkRunnaway(st);
         });
     }
 
-    void checkRunnaway() {
-        if (depth > maxDepth) {
-            // stack too deep
-            throw new JException("Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive. Depth="+depth+" max="+maxDepth,-1);
-                //stack: new Error().stack,
-                //code: "U1001"
-            //};
+    State current(Frame env) {
+        State st = state.get();
+        Frame base = env != null ? env.base : null;
+        if (st.base != base) {
+            // a new evaluation started on this thread
+            st.base = base;
+            st.time = System.currentTimeMillis();
+            st.depth = 0;
         }
-        if (System.currentTimeMillis() - time > timeout) {
+        return st;
+    }
+
+    void checkRunnaway(State st) {
+        if (st.depth > maxDepth) {
+            // stack too deep
+            throw new JException("U1001", -1,
+                "Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive.");
+        }
+        if (System.currentTimeMillis() - st.time > timeout) {
             // expression has run for too long
-            throw new JException("Expression evaluation timeout: Check for infinite loop",-1);
-                //stack: new Error().stack,
-                //code: "U1001"
-            //};
+            throw new JException("U1001", -1, "Expression evaluation timeout: Check for infinite loop");
         }
     };
 

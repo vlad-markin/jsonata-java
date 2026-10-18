@@ -304,4 +304,20 @@ public class CompatJs222Test {
         assertEquals("D2015", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
                 () -> jsonata("{'a':[1,2],'b':[3,4]}.*", seq3).evaluate(null)).getError());
     }
+
+    /** API-05: setRuntimeBounds raises U1001 and measures the time of each evaluation. */
+    @Test
+    public void api05_runtimeBounds() throws Exception {
+        Jsonata e = jsonata("($f := function($n){$n=0?0:1+$f($n-1)}; $f(50))");
+        Jsonata.Frame f = e.createFrame();
+        f.setRuntimeBounds(1000, 30);
+        assertEquals("U1001", org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> e.evaluate(null, f)).getError());
+        // the same frame can be reused after the time limit has passed since its creation
+        Jsonata e2 = jsonata("[1..100].($ * 2) ~> $count");
+        Jsonata.Frame f2 = e2.createFrame();
+        f2.setRuntimeBounds(300, 1000);
+        assertEquals(100, e2.evaluate(null, f2));
+        Thread.sleep(400);
+        assertEquals(100, e2.evaluate(null, f2));
+    }
 }
