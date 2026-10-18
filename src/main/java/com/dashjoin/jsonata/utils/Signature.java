@@ -234,7 +234,7 @@ public class Signature implements Serializable {
                         _param.regex = ( "[" + choice + "m]");
                     } else {
                         // TODO harder
-                        throw new RuntimeException("Choice groups containing parameterized types are not supported");
+                        throw new JException("S0402", position, choice); // location = offset in the signature, see Parser
                     }
                     _param.type = ( "(" + choice + ")");
                     position = endParen;
@@ -251,10 +251,10 @@ public class Signature implements Serializable {
                             _prevParam.subtype = signature.substring(position + 1, endPos);
                             position = endPos;
                         } else {
-                            throw new RuntimeException("Type parameters can only be applied to functions and arrays");
+                            throw new JException("S0401", position, type); // location = offset in the signature, see Parser
                         }
                     } else {
-                        throw new RuntimeException("Type parameters can only be applied to functions and arrays");
+                        throw new JException("S0401", position, test); // location = offset in the signature, see Parser
                     }
                     break;
                 }

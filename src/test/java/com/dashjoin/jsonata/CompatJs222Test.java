@@ -613,4 +613,17 @@ public class CompatJs222Test {
         assertEquals("18:30 -05:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z]', '-0530')").evaluate(null));
         assertEquals("23:30 -00:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z01]', '-0030')").evaluate(null));
     }
+
+    /** SUITE-01: unterminated comment and invalid signatures raise S0106/S0401/S0402 like jsonata-js. */
+    @Test
+    public void suite01_parserErrors() {
+        JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("1 /* no end"));
+        assertEquals("S0106", e.getError());
+        e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("\u03bb($arg)<n<n>>{$arg}(5)"));
+        assertEquals("S0401", e.getError());
+        assertEquals(10, e.getLocation());
+        e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("\u03bb($arr)<(sa<n>)>>{$arr}([[1]])"));
+        assertEquals("S0402", e.getError());
+        assertEquals(9, e.getLocation());
+    }
 }
