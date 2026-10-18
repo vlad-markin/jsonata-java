@@ -52,6 +52,7 @@ import java.util.regex.PatternSyntaxException;
 import javax.lang.model.type.NullType;
 
 import com.dashjoin.jsonata.Functions;
+import com.dashjoin.jsonata.Jsonata;
 import com.dashjoin.jsonata.JException;
 import com.dashjoin.jsonata.Utils;
 
@@ -123,6 +124,9 @@ public class Signature implements Serializable {
         String symbol;
         if (value == null) {
             symbol = "m";
+        } else if (value == Jsonata.NULL_VALUE) {
+            // JSON null (jsonata-js: 'l'), not undefined
+            symbol = "l";
         } else {
             // first check to see if this is a function
             if (Utils.isFunction(value) || Functions.isLambda(value) || (value instanceof Pattern)) { //} instanceof JFunction || value instanceof Function) {

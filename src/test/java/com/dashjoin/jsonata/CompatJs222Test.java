@@ -130,4 +130,32 @@ public class CompatJs222Test {
         m.put(key, null);
         return m;
     }
+
+    /** UND-01: JSON null passed as a function argument is a value, not undefined. */
+    @Test
+    public void und01_nullArgumentIsValue() {
+        assertEquals(1, jsonata("$count(null)").evaluate(null));
+        assertEquals(1, jsonata("$count(owner)").evaluate(mapOfNull("owner")));
+        assertEquals("null", jsonata("$map(null, function($v){$type($v)})").evaluate(null));
+        Jsonata e = jsonata("$sort(null)");
+        e.setOutputConvertNulls(false);
+        assertEquals(List.of(Jsonata.NULL_VALUE), e.evaluate(null));
+        assertEquals("T0412", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$max(null)").evaluate(null)).getError());
+    }
+
+    /** UND-02: signature validation rejects null for typed parameters (T0410), also for host functions. */
+    @Test
+    public void und02_signatureRejectsNull() {
+        assertEquals("T0410", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$uppercase(null)").evaluate(null)).getError());
+        assertEquals("T0410", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$length(a)").evaluate(mapOfNull("a"))).getError());
+        Jsonata e = jsonata("$hu(null)");
+        e.registerFunction("hu", new Jsonata.JFunction((input, args) -> "x", "<s:s>"));
+        assertEquals("T0410", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> e.evaluate(null)).getError());
+        assertEquals("T0410", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$map([null], $uppercase)").evaluate(null)).getError());
+    }
 }

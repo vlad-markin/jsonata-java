@@ -19,7 +19,8 @@ public class SignatureTest {
         return args.toString();
       }
     }, "<a?a?a?a?:s>"));
-    Assertions.assertEquals("[[1], null, [3], null]", expr.evaluate(null));
+    // like jsonata-js 2.2.2: JSON null is wrapped into an array, a missing argument stays undefined
+    Assertions.assertEquals("[[1], [null], [3], null]", expr.evaluate(null));
   }
   
   @Test

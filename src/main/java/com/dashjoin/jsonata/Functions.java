@@ -1572,7 +1572,9 @@ public class Functions {
      */
     public static Object funcApply(Object func, List funcArgs) throws Throwable {
         Object res;
-        if (isLambda(func))
+        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda)
+            // like jsonata-js: native and host functions called from higher-order functions are
+            // validated against their signature (e.g. $map([null], $uppercase) -> T0410)
             res = Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment);
         else
             res = ((JFunction)func).call(null, funcArgs);
