@@ -202,7 +202,9 @@ public class Functions {
           // both formatted like ECMAScript Number#toString (plain digits below 1e21)
           double d = ((Number)arg).doubleValue();
           if (!Double.isFinite(d)) {
-            // JSON.stringify
+            // jsonata-js replacer calls isNumeric: Infinity raises D1001, NaN stringifies as null
+            if (Double.isInfinite(d))
+              throw new JException("D1001", -1, d);
             b.append("null"); return;
           }
           if (d % 1 != 0)
@@ -2101,8 +2103,8 @@ public class Functions {
         
         try {
             Object res = m.invoke(null, callArgs.toArray());
-            // NaN (e.g. from $parseInteger) is passed on like in jsonata-js
-            if (res instanceof Number && !(res instanceof Double && ((Double) res).isNaN()))
+            // NaN / Infinity (e.g. $parseInteger, $sum([1/0]), $eval('1/0')) are passed on like in jsonata-js
+            if (res instanceof Number && !(res instanceof Double && !Double.isFinite((Double) res)))
                 res = Utils.convertNumber((Number)res);
             return res;
         } catch (IllegalAccessException e) {

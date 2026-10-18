@@ -18,7 +18,9 @@ public class ExceptionTest {
 
   @Test
   public void testDivZero() {
-    Jsonata expr = Jsonata.jsonata("1 / 0");
+    // like jsonata-js 2.2.2: 1/0 evaluates to Infinity; using it as an operand raises D1001
+    Assertions.assertEquals(Double.POSITIVE_INFINITY, Jsonata.jsonata("1 / 0").evaluate(null));
+    Jsonata expr = Jsonata.jsonata("1 / 0 + 1");
     try {
       expr.evaluate(null);
       Assertions.fail();

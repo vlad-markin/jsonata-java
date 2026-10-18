@@ -626,4 +626,16 @@ public class CompatJs222Test {
         assertEquals("S0402", e.getError());
         assertEquals(9, e.getLocation());
     }
+
+    /** NUM-10: Infinity/NaN results like jsonata-js (D1001 only when used as operand, D3001 in $string). */
+    @Test
+    public void num10_nonFiniteResults() {
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("1/0").evaluate(null));
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("$eval('1/0')").evaluate(null));
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("$sum([1/0])").evaluate(null));
+        assertEquals(Double.NaN, jsonata("5 % 0").evaluate(null));
+        assertEquals("D3001", err("$string(1/0)"));
+        assertEquals("D1001", err("$string({'a': 1/0})"));
+        assertEquals("D1001", err("1/0 + 1"));
+    }
 }

@@ -947,6 +947,10 @@ public class Jsonata {
                 result = lhs % rhs;
                 break;
         }
+        // like jsonata-js: Infinity / NaN are results here (1/0, x % 0); they raise D1001 only when
+        // used as an operand, and $string raises D3001
+        if (!Double.isFinite(result))
+            return result;
         return Utils.convertNumber(result);
     }
  
