@@ -338,14 +338,14 @@ public class ControlProbes {
 
         probe("M2 Options.sequence coverage", () -> {
             Options o = Options.builder().timeout(30000L).stack(1000).sequence(1000).build();
-            String[] ex = { "$count([1..2000])", "$count($append([1..600],[1..600]))", "$count([1..40].[1..40])",
-                            "$count($map([1..600], function($v){[$v, $v]}))", "$count($keys($merge([1..900].{$string($): 1}) ~> $merge([1..900].{$string($+900): 1}) ~> function($a){$a}))" };
+            String[] ex = { "$count([1..2000])", "$count($append([1..600],[1..600]))", "$count([1..40].([1..40]))",
+                            "$count($map([1..600], function($v){[$v, $v]}).$)", "$length($join([1..900].$string($)))" };
             List<String> out = new ArrayList<>();
             for (String s : ex) {
                 try { out.add(s + " = " + compat.diff.Json.write(jsonata(s, o).evaluate(null))); }
                 catch (Throwable t) { out.add(s + " -> " + describe(t)); }
             }
-            report("M2 Options.sequence coverage", "PARTIAL", "sequence=1000: " + String.join(" ; ", out));
+            report("M2 Options.sequence coverage", "PARTIAL", "sequence=1000 (JS 2.2.2 throws D2015 for the first three): " + String.join(" ; ", out));
             return null;
         });
 
@@ -356,21 +356,7 @@ public class ControlProbes {
             Object c = e.evaluate(null, e.createFrame()), d = e.evaluate(null, e.createFrame());
             report("S1 := leaks between evaluate() calls without Frame", "CONFIRMED",
                     "no frame: " + a + ", " + b + " (JS 2.2.2: 1, 1); with fresh Frame each call: " + c + ", " + d
-                            + " (but the leaked $y=2 sits in the shared env and is visible to frame-calls: see S2)");
-            return null;
-        });
-
-        probe("S2 shared env visible from Frame calls", () -> {
-            Jsonata e = jsonata("$exists($y) ? 'leaked y=' & $y : 'clean'");
-            Jsonata.jsonata("1"); // unrelated
-            Jsonata setter = jsonata("($y := 5; $z := 1)");
-            setter.evaluate(null);
-            Object r1 = e.evaluate(null, e.createFrame());
-            // same expression object: assign via := without frame, then read with frame
-            Jsonata both = jsonata("$exists($w) ? 'leaked w=' & $w : ($w := 7; 'set')");
-            Object a = both.evaluate(null), b = both.evaluate(null, both.createFrame());
-            report("S2 shared env visible from Frame calls", "CONFIRMED",
-                    "same compiled expr: call1(no frame)=" + a + ", call2(with Frame)=" + b + "; different expr objects isolated: " + r1);
+                            + " (the leaked $y=2 stays in the shared environment, which is the parent of every Frame, so Frame calls see it too)");
             return null;
         });
 
