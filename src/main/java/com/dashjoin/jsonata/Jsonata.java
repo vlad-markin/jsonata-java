@@ -1804,7 +1804,8 @@ public class Jsonata {
                 // add the position field to the error; like jsonata-js applyInner
                 // (err.position = proc.position), an error raised while applying a lambda or a
                 // native/registered function is reported at the position of this call
-                jex.location = expr.position;
+                // (for a lambda: its position property, i.e. the most recent call of that lambda)
+                jex.location = proc instanceof Symbol && ((Symbol)proc).position > 0 ? ((Symbol)proc).position : expr.position;
             }
             if (jex.current==null) {
                 // and the Object identifier
