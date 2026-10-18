@@ -11,7 +11,32 @@
     <maven.compiler.release>21</maven.compiler.release>
   </properties>
   <build>
+    <!-- -Dbuild.dir=target-x builds into another directory (e.g. a patched engine copy) -->
+    <directory>${build.dir}</directory>
     <plugins>
+      <plugin>
+        <!-- copy the engine sources WITHOUT module-info.java: otherwise maven compiles everything as
+             module com.dashjoin.jsonata, which cannot read jdk.jfr / jdk.management -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <execution>
+            <id>copy-engine-sources</id>
+            <phase>generate-sources</phase>
+            <goals><goal>copy-resources</goal></goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/engine-src</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${engine.src}</directory>
+                  <excludes><exclude>module-info.java</exclude></excludes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
@@ -23,7 +48,7 @@
             <goals><goal>add-source</goal></goals>
             <configuration>
               <sources>
-                <source>${engine.src}</source>
+                <source>${project.build.directory}/engine-src</source>
                 <source>../../jvm/src/main/java</source>
               </sources>
             </configuration>
@@ -34,9 +59,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.14.1</version>
-        <configuration>
-          <excludes><exclude>**/module-info.java</exclude></excludes>
-        </configuration>
       </plugin>
     </plugins>
   </build>
@@ -46,6 +68,11 @@
       <id>default-engine</id>
       <activation><property><name>!engine.src</name></property></activation>
       <properties><engine.src>../../../src/main/java</engine.src></properties>
+    </profile>
+    <profile>
+      <id>default-build-dir</id>
+      <activation><property><name>!build.dir</name></property></activation>
+      <properties><build.dir>${project.basedir}/target</build.dir></properties>
     </profile>
   </profiles>
 </project>

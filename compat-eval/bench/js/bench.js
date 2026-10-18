@@ -36,6 +36,7 @@ const tick = () => new Promise((r) => setImmediate(r));
   console.error(`[js] size=${size} load=${loadMs.toFixed(0)}ms dataHeap=${(baseHeap / 1048576).toFixed(0)}MB`);
   for (const q of queries) {
     if (q.sizes && !q.sizes.includes(size)) continue;
+    if (q.js_sizes && !q.js_sizes.includes(size)) continue;
     if (only && !only.has(q.name)) continue;
     // compile time: median of 200 compilations
     const ct = [];
@@ -76,7 +77,7 @@ const tick = () => new Promise((r) => setImmediate(r));
     const hs = heapDeltas.slice().sort((a, b) => a - b);
     const rec = {
       engine: 'jsonata-js-2.2.2', node: process.version, query: q.name, size, warmup_done: warmDone, iters_done: times.length,
-      compile_ms_median: median(ct), error,
+      compile_ms_median: median(ct), error, loadavg1: require('os').loadavg()[0],
       eval_ms_median: ts.length ? median(ts) : null, eval_ms_p95: ts.length ? pct(ts, 0.95) : null,
       eval_ms_min: ts.length ? ts[0] : null, eval_ms_max: ts.length ? ts[ts.length - 1] : null,
       heap_delta_mb_median: hs.length ? median(hs) / 1048576 : null,

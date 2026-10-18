@@ -4,3 +4,5 @@ out/
 *.log
 bench/data/
 bench/jvm/target/
+bench/jvm/target*/
+bench/prof/

@@ -10,6 +10,10 @@ const js = load('js.jsonl'), jvm = load('jvm.jsonl'), modes = load('jvm-modes.js
 const f = (x, d = 1) => (x == null ? '—' : x >= 100 ? x.toFixed(0) : x.toFixed(d));
 const key = (r) => r.query + '@' + r.size;
 const jvmBy = Object.fromEntries(jvm.map((r) => [key(r), r]));
+const jsBy = Object.fromEntries(js.map((r) => [key(r), r]));
+const order = [...new Set([...js, ...jvm].map((r) => r.query))];
+const rowsAll = [...new Set([...js, ...jvm].map(key))].map((k) => jsBy[k] || { query: jvmBy[k].query, size: jvmBy[k].size, jsMissing: true })
+  .sort((x, y) => x.size - y.size || order.indexOf(x.query) - order.indexOf(y.query));
 const eqPath = path.join(dir, 'equality.tsv');
 const eq = fs.existsSync(eqPath) ? Object.fromEntries(fs.readFileSync(eqPath, 'utf8').trim().split('\n').map((l) => l.split('\t')).map(([k, v]) => [k, v])) : {};
 
@@ -17,10 +21,10 @@ const out = [];
 const csv = ['query,size,js_median_ms,js_p95_ms,js_iters,jvm_median_ms,jvm_p95_ms,jvm_iters,ratio_js_over_jvm,js_heap_delta_mb,js_gc_during_eval,jvm_alloc_mb,jvm_heap_peak_mb,js_compile_ms,jvm_compile_ms,equal'];
 out.push('| query | N | JS median | JS p95 | JVM median | JVM p95 | JS/JVM | JS heapΔ MB | JVM alloc MB/eval | JVM peak heap MB | equal |');
 out.push('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|');
-for (const a of js) {
+for (const a of rowsAll) {
   const b = jvmBy[key(a)] || {};
   const ratio = a.eval_ms_median && b.eval_ms_median ? a.eval_ms_median / b.eval_ms_median : null;
-  const e = eq[`${a.query}-${a.size}`] || '?';
+  const e = eq[`${a.query}-${a.size}`] || (a.jsMissing ? 'JS not run' : '?');
   out.push(`| ${a.query} | ${a.size / 1000}k | ${f(a.eval_ms_median)} | ${f(a.eval_ms_p95)} | ${f(b.eval_ms_median)} | ${f(b.eval_ms_p95)} | ${ratio == null ? '—' : ratio.toFixed(2) + '×'} | ${f(a.heap_delta_mb_median)}${a.gc_during_eval_total ? '*' : ''} | ${f(b.alloc_mb_median)} | ${f(b.heap_peak_mb)} | ${e} |`);
   csv.push([a.query, a.size, a.eval_ms_median, a.eval_ms_p95, a.iters_done, b.eval_ms_median, b.eval_ms_p95, b.iters_done, ratio, a.heap_delta_mb_median, a.gc_during_eval_total, b.alloc_mb_median, b.heap_peak_mb, a.compile_ms_median, b.compile_ms_median, e].join(','));
 }

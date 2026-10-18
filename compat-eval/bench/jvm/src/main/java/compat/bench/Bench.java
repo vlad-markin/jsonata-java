@@ -183,6 +183,7 @@ public class Bench {
             rec.put("iters_done", times.length);
             rec.put("compile_ms_median", median(ct));
             rec.put("error", error);
+            rec.put("loadavg1", ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage());
             rec.put("eval_ms_median", ts.length > 0 ? median(ts) : null);
             rec.put("eval_ms_p95", ts.length > 0 ? pct(ts, 0.95) : null);
             rec.put("eval_ms_min", ts.length > 0 ? ts[0] : null);
