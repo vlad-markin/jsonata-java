@@ -664,4 +664,17 @@ public class CompatJs222Test {
         assertEquals(6, ex("$sort([1, 'a'], function($l,$r){$l > $r})", null).getLocation());
         assertEquals(8, ex("$reduce(['a','b'], function($a, $b){$a * $b})", null).getLocation());
     }
+
+    /** API-08: evaluation callbacks / runtime bounds cannot be replaced from inside the expression. */
+    @Test
+    public void api08_callbacksNotReachableFromExpression() {
+        Jsonata e = jsonata("($__evaluate_entry := 1; [1..5] ~> $count)");
+        Jsonata.Frame f = e.createFrame();
+        f.setRuntimeBounds(1000, 1000);
+        assertEquals(5, e.evaluate(null, f));
+        Jsonata loop = jsonata("($__evaluate_entry := $nothing; $f := function($n){$n = 0 ? 0 : $f($n - 1)}; $f(100000000))");
+        Jsonata.Frame f2 = loop.createFrame();
+        f2.setRuntimeBounds(200, 100000);
+        assertEquals("U1001", org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> loop.evaluate(null, f2)).getError());
+    }
 }

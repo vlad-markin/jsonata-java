@@ -128,6 +128,8 @@ public class Jsonata {
 
         public long time;
 
+        Object entryCb, exitCb;
+
         public List<Object> createSequence() { return createSequence(Utils.NONE); }
 
         public List<Object> createSequence(Object el) {
@@ -229,7 +231,7 @@ public class Jsonata {
 
         environment.base.depth++;
         environment.base.guardrails();
-        var entryCallback = environment.lookup("__evaluate_entry");
+        var entryCallback = environment.base.entryCb;
         if(entryCallback!=null) {
             ((EntryCallback)entryCallback).callback(expr, input, environment);
         }
@@ -304,7 +306,7 @@ public class Jsonata {
             result = /* await */ evaluateGroupExpression(expr.group, result, environment);
         }
  
-        var exitCallback = environment.lookup("__evaluate_exit");
+        var exitCallback = environment.base.exitCb;
         if(exitCallback!=null) {
             ((ExitCallback)exitCallback).callback(expr, input, environment, result);
         }
@@ -646,7 +648,7 @@ public class Jsonata {
     Infix expr = (Infix)_expr;
         Object result = null;
         var lhs = /* await */ evaluate(expr.lhs, input, environment);
-        String op = ""+expr.value;
+        String op = expr.value instanceof String ? (String)expr.value : opString(expr.value);
 
         if (op.equals("and") || op.equals("or")) {
 
@@ -961,14 +963,15 @@ public class Jsonata {
       * @param {Object} op - opcode
       * @returns {*} Result
       */
+    static final String[] OPS = new String[128];
+    static { for (char c = 0; c < 128; c++) OPS[c] = String.valueOf(c); }
+    static String opString(Object v) { return v instanceof Character && (Character)v < 128 ? OPS[(Character)v] : ""+v; }
+
     Object evaluateEqualityExpression(Object lhs, Object rhs, String op) {
         Object result = null;
 
         // type checks
-        var ltype = lhs!=null ? lhs.getClass().getSimpleName() : null;
-        var rtype = rhs!=null ? rhs.getClass().getSimpleName() : null;
-
-        if (ltype == null || rtype == null) {
+        if (lhs == null || rhs == null) {
             // if either side is undefined, the result is false
             return false;
         }
@@ -1159,6 +1162,7 @@ public class Jsonata {
     static class GroupEntry {
         Object data;
         int exprIndex;
+        boolean owned; // data is a private accumulator list (no copy per added item)
     }
      
     /**
@@ -1214,7 +1218,10 @@ public class Jsonata {
                         }
 
                         // append it as an array
-                        groups.get(key).data = Functions.append(groups.get(key).data, item);
+                        GroupEntry g = groups.get(key);
+                        if (!g.owned) { g.data = Functions.append(g.data, item); g.owned = true; }
+                        else if (item instanceof List) ((List)g.data).addAll((List)item);
+                        else ((List)g.data).add(item);
                     } else {
                         groups.put(key, entry);
                     }
@@ -2800,6 +2807,8 @@ public class Jsonata {
         // Porting JS to Java note: guardrails function is in Java class Frame
         exec_env.base = exec_env;
         exec_env.depth = 0;
+        exec_env.entryCb = exec_env.lookup("__evaluate_entry");
+        exec_env.exitCb = exec_env.lookup("__evaluate_exit");
 
         if (validateInput)
             Functions.validateInput(input);
