@@ -320,4 +320,14 @@ public class CompatJs222Test {
         Thread.sleep(400);
         assertEquals(100, e2.evaluate(null, f2));
     }
+
+    /** NUM-05: $number accepts the same strings as jsonata-js and raises D3030 otherwise. */
+    @Test
+    public void num05_number() {
+        assertEquals(1000, jsonata("$number('1e3')").evaluate(null));
+        assertEquals(31, jsonata("$number('0x1F')").evaluate(null));
+        assertEquals(3, jsonata("$number('0b11')").evaluate(null));
+        for (String s : new String[] { "'+5'", "'1.'", "'.5'", "'  42 '", "'Hello'", "''", "'1e400'", "'Infinity'" })
+            assertEquals("D3030", err("$number(" + s + ")"), s);
+    }
 }

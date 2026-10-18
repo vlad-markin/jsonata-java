@@ -1320,20 +1320,38 @@ public class Functions {
 
         if (arg instanceof Number)
             result = (Number)arg;
-        else if (arg instanceof String) {
-            String s = (String)arg;
-            if (s.startsWith("0x"))
-                result = Long.parseLong(s.substring(2), 16);
-            else if (s.startsWith("0B"))
-                result = Long.parseLong(s.substring(2), 2);
-            else if (s.startsWith("0O"))
-                result = Long.parseLong(s.substring(2), 8);
-            else
-                result = Double.valueOf((String)arg);
+        else if (arg instanceof String && DECIMAL.matcher((String)arg).matches()
+                && Double.isFinite(Double.parseDouble((String)arg))) {
+            result = Double.parseDouble((String)arg);
+        } else if (arg instanceof String && RADIX.matcher((String)arg).find()) {
+            // same (loosely anchored) regex as jsonata-js, then JavaScript Number(str)
+            result = jsNumberOfRadixLiteral((String)arg);
         } else if (arg instanceof Boolean) {
             result = ((boolean)arg) ? 1:0;
+        } else {
+            throw new JException("D3030", -1, arg);
         }
         return result;
+    }
+
+    static final Pattern DECIMAL = Pattern.compile("^-?[0-9]+(\\.[0-9]+)?([Ee][-+]?[0-9]+)?$");
+    static final Pattern RADIX = Pattern.compile("^(0[xX][0-9A-Fa-f]+)|(0[oO][0-7]+)|(0[bB][0-1]+)$");
+
+    /** JavaScript Number("0x1F" / "0o17" / "0b11"); anything else is NaN */
+    static Number jsNumberOfRadixLiteral(String s) {
+        String t = s.trim();
+        int radix = 0;
+        if (t.length() > 2 && t.charAt(0) == '0') {
+            char c = Character.toLowerCase(t.charAt(1));
+            radix = c == 'x' ? 16 : c == 'o' ? 8 : c == 'b' ? 2 : 0;
+        }
+        if (radix == 0)
+            return Double.NaN;
+        try {
+            return Utils.convertNumber(new java.math.BigInteger(t.substring(2), radix).doubleValue());
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
     }
 
     /**
