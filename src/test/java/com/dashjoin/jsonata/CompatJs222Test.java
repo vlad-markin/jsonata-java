@@ -367,4 +367,11 @@ public class CompatJs222Test {
         assertEquals("$assert() statement failed", ex("$assert(false, '')", null).getMessage());
         assertEquals("The radix of the formatBase function must be between 2 and 36.  It was given 1", ex("$formatBase(1, 1)", null).getMessage());
     }
+
+    /** ERR-02: partial application of a function name without '$' raises T1007. */
+    @Test
+    public void err02_partialWithoutDollar() {
+        assertEquals("T1007", err("substring(?, 0, ?)"));
+        assertEquals("T1008", err("$nothing(?, 0)"));
+    }
 }

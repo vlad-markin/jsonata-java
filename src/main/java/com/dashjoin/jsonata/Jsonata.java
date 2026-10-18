@@ -1897,7 +1897,7 @@ public class Jsonata {
         }
         // lookup the procedure
         var proc = /* await */ evaluate(expr.procedure, input, environment);
-        if (proc != null && expr.procedure.type.equals("path") && environment.lookup((String)expr.procedure.steps.get(0).value)!=null) {
+        if (proc == null && expr.procedure.type.equals("path") && environment.lookup((String)expr.procedure.steps.get(0).value)!=null) {
             // help the user out here if they simply forgot the leading $
             throw new JException("T1007",
                 expr.position,
