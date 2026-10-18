@@ -12,7 +12,8 @@ public class RegexTest {
         var expression = Jsonata.jsonata("/^test.*$/");
         Object evaluate = expression.evaluate(null);
         String expected = "^test.*$";
-        Assertions.assertEquals(expected, evaluate.toString());
+        // Pattern.toString() is the translated java.util.regex pattern, JsRegex.source() the JS source
+        Assertions.assertEquals(expected, com.dashjoin.jsonata.utils.JsRegex.source((java.util.regex.Pattern) evaluate));
     }
 
     @Test
@@ -20,7 +21,8 @@ public class RegexTest {
         var expression = Jsonata.jsonata("$eval('/^test.*$/')");
         Object evaluate = expression.evaluate(null);
         String expected = "^test.*$";
-        Assertions.assertEquals(expected, evaluate.toString());
+        // Pattern.toString() is the translated java.util.regex pattern, JsRegex.source() the JS source
+        Assertions.assertEquals(expected, com.dashjoin.jsonata.utils.JsRegex.source((java.util.regex.Pattern) evaluate));
     }
 
     @Test
@@ -35,7 +37,8 @@ public class RegexTest {
         Assertions.assertEquals("l", evaluate.get("match"));
         Assertions.assertEquals(2, evaluate.get("start"));
         Assertions.assertEquals(3, evaluate.get("end"));
-        Assertions.assertEquals(List.of("l"), evaluate.get("groups"));
+        // like jsonata-js: groups holds the capturing groups only
+        Assertions.assertEquals(List.of(), evaluate.get("groups"));
         Assertions.assertInstanceOf(Jsonata.Fn0.class, evaluate.get("next"));
     }
 
@@ -51,7 +54,8 @@ public class RegexTest {
         Assertions.assertEquals("l", evaluate.get("match"));
         Assertions.assertEquals(3, evaluate.get("start"));
         Assertions.assertEquals(4, evaluate.get("end"));
-        Assertions.assertEquals(List.of("l"), evaluate.get("groups"));
+        // like jsonata-js: groups holds the capturing groups only
+        Assertions.assertEquals(List.of(), evaluate.get("groups"));
         Assertions.assertInstanceOf(Jsonata.Fn0.class, evaluate.get("next"));
     }
 }

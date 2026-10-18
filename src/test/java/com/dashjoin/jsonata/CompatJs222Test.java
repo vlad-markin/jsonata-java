@@ -216,4 +216,62 @@ public class CompatJs222Test {
                 jsonata("($p := function($a,$b,$c){[$a,$b,$c]}(?, 2); $map([1,2], $p))").evaluate(null));
         assertEquals("a", jsonata("$substring(?, 0, ?)('abc', 1)").evaluate(null));
     }
+
+    static String err(String expr) {
+        return org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata(expr).evaluate(null)).getError();
+    }
+
+    /** RE-01/RE-02: JavaScript regex syntax and semantics. */
+    @Test
+    public void re01_re02_jsRegexDialect() {
+        assertEquals("x", jsonata("$replace('ab', /[^]+/, 'x')").evaluate(null));
+        assertEquals(false, jsonata("$contains('A', /\\0/)").evaluate(null));
+        assertEquals(true, jsonata("$contains('aZ', /\\Z/)").evaluate(null)); // identity escape = 'Z'
+        assertEquals("a_b_c", jsonata("$replace('a\u00a0b\u2028c', /\\s/, '_')").evaluate(null));
+        assertEquals(false, jsonata("$contains('abc\n', /c$/)").evaluate(null));
+        assertEquals(true, jsonata("$contains('ab\ncd', /b$/m)").evaluate(null));
+        assertEquals(true, jsonata("$contains('\u00e9', /\u00c9/i)").evaluate(null));
+        assertEquals(true, jsonata("$contains('a{,2}', /a{,2}/)").evaluate(null));
+        org.junit.jupiter.api.Assertions.assertThrows(java.util.regex.PatternSyntaxException.class,
+                () -> jsonata("$contains('aa', /a++/)"));
+    }
+
+    /** RE-03: zero-length matches raise D1004 while iterating, like jsonata-js. */
+    @Test
+    public void re03_zeroLengthMatch() {
+        assertEquals("D1004", err("$match('ab', /x*/)"));
+        assertEquals("D1004", err("$replace('abracadabra', /.*?/, '$1')"));
+        assertEquals("D1004", err("$split('ab', /x*/)"));
+        assertEquals(true, jsonata("$contains('ab', /x*/)").evaluate(null));
+        assertEquals(List.of("", ""), jsonata("$split('42', /.*/)").evaluate(null));
+    }
+
+    /** RE-04: match object of a regex used as a function; custom matcher functions. */
+    @Test
+    public void re04_matchObjectAndCustomMatchers() {
+        Map<?, ?> m = (Map<?, ?>) jsonata("'abc' ~> /b/").evaluate(null);
+        assertEquals(List.of("match", "start", "end", "groups", "next"), new ArrayList<>(m.keySet()));
+        assertEquals(List.of(), m.get("groups"));
+        assertEquals(1, ((Map<?, ?>) jsonata("$map(['ab'], /b/)").evaluate(null)).get("start"));
+        assertEquals(List.of("a", "b"), jsonata(
+                "$split('aXb', function($s){ $s ~> /X/ })").evaluate(null));
+    }
+
+    /** RE-05: the limit argument of $match. */
+    @Test
+    public void re05_matchLimit() {
+        assertEquals(List.of("1", "2"), jsonata("$match('a1b2c3', /\\d/, 2).match").evaluate(null));
+    }
+
+    /** RE-06: $replace replacement strings and errors. */
+    @Test
+    public void re06_replace() {
+        assertEquals("a$c", jsonata("$replace('abc', /b/, '$$')").evaluate(null));
+        assertEquals("a[]c", jsonata("$replace('abc', /(b)/, '[$2]')").evaluate(null));
+        assertEquals("x.b", jsonata("$replace('a.b', 'a', 'x', 1)").evaluate(null));
+        assertEquals("ax", jsonata("$replace('a.', '.', 'x', 1)").evaluate(null));
+        assertEquals("D3012", err("$replace('abc', /b/, function($m){42})"));
+        assertEquals("D3010", err("$replace('abc', '', 'x')"));
+        assertEquals("D3011", err("$replace('abc', 'b', 'x', -1)"));
+    }
 }

@@ -1820,19 +1820,13 @@ public class Jsonata {
                     result = ((Fn2)proc).apply(_args.size() <= 0 ? null : _args.get(0), _args.size() <= 1 ? null :_args.get(1));
                 }
              } else if (proc instanceof Pattern) {
-                List _res = new ArrayList<>();
-                for (Object s : (List)validatedArgs) {
-                //System.err.println("PAT "+proc+" input "+s);
-                    if (s instanceof String) {
-                        Matcher matcher = ((Pattern) proc).matcher((String) s);
-                        _res.add(regexClosure(matcher));
-                    }
-                }
-                if (_res.size() == 1) {
-                    result = _res.get(0);
-                } else {
-                    result = _res;
-                }
+                // regex used as a function: the jsonata-js matcher closure function(str, fromIndex)
+                List _args = (List)validatedArgs;
+                Object str = _args.size() > 0 ? _args.get(0) : null;
+                Object from = _args.size() > 1 ? _args.get(1) : null;
+                result = str instanceof String
+                    ? Functions.regexMatch((Pattern) proc, (String) str, from instanceof Number ? ((Number) from).intValue() : 0)
+                    : null;
              } else {
                 System.out.println("Proc not found "+proc);
                  throw new JException(
@@ -1852,21 +1846,6 @@ public class Jsonata {
          return result;
      }
 
-    private static Map regexClosure(Matcher matcher) {
-        if (matcher.find()) {
-            String group = matcher.group();
-            return Map.of(
-                    "match", group,
-                    "start", matcher.start(),
-                    "end", matcher.end(),
-                    "groups", List.of(group),
-                    "next", (Fn0<Map>) () -> regexClosure(matcher)
-            );
-        } else {
-            return null;
-        }
-    }
- 
      /**
       * Evaluate lambda against input data
       * @param {Object} expr - JSONata expression

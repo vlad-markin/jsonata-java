@@ -156,13 +156,8 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
                 }
                 flags = path.substring(start, position) + 'g';
                 
-                // Convert flags to Java Pattern flags
-                int _flags = 0;
-                if (flags.contains("i"))
-                    _flags |= Pattern.CASE_INSENSITIVE;
-                if (flags.contains("m"))
-                    _flags |= Pattern.MULTILINE;                
-                return Pattern.compile(pattern, _flags); // Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL);
+                // translate the JavaScript regex syntax/semantics to java.util.regex
+                return com.dashjoin.jsonata.utils.JsRegex.compile(pattern, flags.contains("i"), flags.contains("m"));
             }
             if ((currentChar == '(' || currentChar == '[' || currentChar == '{') && path.charAt(position - 1) != '\\') {
                 depth++;

@@ -669,41 +669,79 @@ public class Functions {
         return str.concat(substr(padding, 0, pads));
     }
 
-    static class RegexpMatch {
-        String match;
-        int index;
-        List<String> groups;
-        @Override public String toString() {
-            return "regexpMatch "+match+" idx="+index+" groups="+groups;
-        }
+    /**
+     * The jsonata-js regex matcher closure: function(str, fromIndex) returning
+     * {match, start, end, groups, next} or undefined. Like jsonata-js, a regex that matches a
+     * zero-length string raises D1004 when iterating (next()).
+     */
+    public static Map regexMatch(Pattern re, String str, int fromIndex) {
+        Matcher m = re.matcher(str);
+        if (fromIndex > str.length() || !m.find(Math.max(fromIndex, 0)))
+            return null;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("match", m.group());
+        result.put("start", m.start());
+        result.put("end", m.end());
+        List<Object> groups = new ArrayList<>();
+        for (int g = 1; g <= m.groupCount(); g++)
+            groups.add(m.group(g));
+        result.put("groups", groups);
+        // JS RegExp.exec with the 'g' flag: lastIndex = end of match (not advanced for empty matches)
+        final int lastIndex = m.end();
+        result.put("next", (Jsonata.Fn0<Object>) () -> {
+            if (lastIndex >= str.length())
+                return null;
+            Map next = regexMatch(re, str, lastIndex);
+            if (next != null && "".equals(next.get("match"))) {
+                // matches zero length string; this will never progress
+                throw new JException("D1004", -1, com.dashjoin.jsonata.utils.JsRegex.source(re));
+            }
+            return next;
+        });
+        return result;
     }
+
     /**
      * Evaluate the matcher function against the str arg
      *
-     * @param {*} matcher - matching function (native or lambda)
+     * @param {*} matcher - matching function (native or lambda) or a regex
      * @param {string} str - the string to match against
      * @returns {object} - structure that represents the match(es)
      */
-    public static List<RegexpMatch> evaluateMatcher(Pattern matcher, String str) {
-        List<RegexpMatch> res = new ArrayList<>();
-        Matcher m = matcher.matcher(str);
-        while (m.find()) {
-            RegexpMatch rm = new RegexpMatch();
-
-            //System.out.println("grc="+m.groupCount()+" "+m.group(1));
-
-            rm.index = m.start();
-            rm.match = m.group();
-
-            List<String> groups = new ArrayList<>();
-            // Collect the groups
-            for (int g=1; g<=m.groupCount(); g++)
-                groups.add(m.group(g));
-
-            rm.groups = groups;
-            res.add(rm);
+    static Map evaluateMatcher(Object matcher, Object str) throws Throwable {
+        Object result;
+        if (matcher instanceof Pattern)
+            result = str instanceof String ? regexMatch((Pattern) matcher, (String) str, 0) : null;
+        else if (matcher instanceof Jsonata.Fn0)
+            result = ((Jsonata.Fn0) matcher).get();
+        else {
+            List<Object> args = new ArrayList<>();
+            if (str != NO_ARG)
+                args.add(str);
+            result = funcApply(matcher, args);
         }
-        return res;
+        if (result == null || result == Jsonata.NULL_VALUE)
+            return null;
+        if (!(result instanceof Map) || !(((Map) result).get("start") instanceof Number
+                || ((Map) result).get("end") instanceof Number || ((Map) result).get("groups") instanceof List
+                || Utils.isFunction(((Map) result).get("next")) || isLambda(((Map) result).get("next")))) {
+            // the matcher function didn't return the correct structure
+            throw new JException("T1010", -1);
+        }
+        return (Map) result;
+    }
+
+    static final Object NO_ARG = new Object();
+
+    static Map nextMatch(Map matches) throws Throwable {
+        Object next = matches.get("next");
+        if (next == null)
+            return null;
+        return evaluateMatcher(next, NO_ARG);
+    }
+
+    static int intOf(Object n) {
+        return ((Number) n).intValue();
     }
 
     /**
@@ -712,7 +750,7 @@ public class Functions {
      * @param {String} token - substring or regex to find
      * @returns {Boolean} - true if str contains token
      */
-    public static Boolean contains(String str, Object token) {
+    public static Boolean contains(String str, Object token) throws Throwable {
         // undefined inputs always return undefined
         if (str == null || token == null) {
             return null;
@@ -722,14 +760,9 @@ public class Functions {
 
         if (token instanceof String) {
             result = (str.indexOf((String)token) != -1);
-        } else if (token instanceof Pattern) {
-            var matches = evaluateMatcher((Pattern)token, str);
-            //if (dbg) System.out.println("match = "+matches);
-            //result = (typeof matches !== 'undefined');
-            //throw new Error("regexp not impl"); //result = false;
-            result = !matches.isEmpty();
         } else {
-            throw new Error("unknown type to match: "+token);
+            var matches = evaluateMatcher(token, str);
+            result = matches != null;
         }
 
         return result;
@@ -742,34 +775,31 @@ public class Functions {
      * @param {Integer} [limit] - max number of matches to return
      * @returns {Array} The array of match objects
      */
-    public static List<Map> match(String str, Pattern regex, Integer limit) {
+    public static List<Map> match(String str, Object regex, Number limit) throws Throwable {
         // undefined inputs always return undefined
         if (str == null) {
             return null;
         }
 
         // limit, if specified, must be a non-negative number
-        if (limit!=null && limit < 0) {
-            throw new JException("D3040", -1, limit
-            );
+        if (limit != null && limit.doubleValue() < 0) {
+            throw new JException("D3040", -1, limit);
         }
 
         var result = createSequence();
-        var matches = evaluateMatcher(regex, str);
-        int max = Integer.MAX_VALUE;
-        if (limit!=null)
-            max = limit;
 
-        for (int i=0; i < matches.size(); i++) {
-            Map m = new LinkedHashMap<>();
-            RegexpMatch rm = matches.get(i);
-            // Convert to JSON map:
-            m.put("match", rm.match);
-            m.put("index", rm.index);
-            m.put("groups", rm.groups);
-            result.add(m);
-            if (i>=max)
-                break;
+        if (limit == null || limit.doubleValue() > 0) {
+            int count = 0;
+            var matches = evaluateMatcher(regex, str);
+            while (matches != null && (limit == null || count < limit.doubleValue())) {
+                Map m = new LinkedHashMap<>();
+                m.put("match", matches.get("match"));
+                m.put("index", matches.get("start"));
+                m.put("groups", matches.get("groups"));
+                result.add(m);
+                matches = nextMatch(matches);
+                count++;
+            }
         }
         return (List)result;
     }
@@ -794,160 +824,141 @@ public class Functions {
         return String.join(separator, strs);
     }
 
-    static String safeReplacement(String in) {
-        // In JSONata and in Java the $ in the replacement test usually starts the insertion of a capturing group
-        // In order to replace a simple $ in Java you have to escape the $ with "\$"
-        // in JSONata you do this with a '$$'
-        // "\$" followed any character besides '<' and and digit into $ + this character  
-        return in.replaceAll("\\$\\$", "\\\\\\$")
-            .replaceAll("([^\\\\]|^)\\$([^0-9^<])", "$1\\\\\\$$2")
-            .replaceAll("\\$$", "\\\\\\$"); // allow $ at end
-    }
-
     /**
-     * Safe replaceAll
-     * 
-     * In Java, non-existing groups cause an exception.
-     * Ignore these non-existing groups (replace with "")
-     * 
-     * @param s
-     * @param pattern
-     * @param replacement
-     * @return
+     * Expands $0, $n and $$ in a replacement string like jsonata-js
      */
-    static String safeReplaceAll(String s, Pattern pattern, Object _replacement) {
-
-        if (!(_replacement instanceof String))
-            return safeReplaceAllFn(s, pattern, _replacement);
-
-        String replacement = (String)_replacement;
-
-        replacement = safeReplacement(replacement);
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        for (int i=0; i<10; i++) {
-            try {
-                r = m.replaceAll(replacement);
-                break;
-            } catch (IndexOutOfBoundsException e) {
-                String msg = e.getMessage();
-
-                // Message we understand needs to be:
-                // No group X
-                if (!msg.contains("No group")) throw e;
-
-                // Adjust replacement to remove the non-existing group
-                String g = "" + msg.charAt(msg.length()-1);
-
-                replacement = replacement.replace("$"+g, "");
+    static String substitute(String replacement, Map regexMatch) {
+        List groups = (List) regexMatch.get("groups");
+        if (groups == null)
+            groups = List.of();
+        StringBuilder substitute = new StringBuilder();
+        // scan forward, copying the replacement text into the substitute string
+        // and replace any occurrence of $n with the values matched by the regex
+        int position = 0;
+        int index = replacement.indexOf('$', position);
+        while (index != -1 && position < replacement.length()) {
+            substitute.append(replacement, position, index);
+            position = index + 1;
+            char dollarVal = position < replacement.length() ? replacement.charAt(position) : 0;
+            if (dollarVal == '$') {
+                // literal $
+                substitute.append('$');
+                position++;
+            } else if (dollarVal == '0') {
+                substitute.append(regexMatch.get("match"));
+                position++;
+            } else {
+                int maxDigits;
+                if (groups.size() == 0) {
+                    // no sub-matches; any $ followed by a digit will be replaced by an empty string
+                    maxDigits = 1;
+                } else {
+                    // max number of digits to parse following the $
+                    maxDigits = (int) Math.floor(Math.log(groups.size()) * (1 / Math.log(10))) + 1;
+                }
+                Integer idx = parseIntPrefix(replacement.substring(position, Math.min(replacement.length(), position + maxDigits)));
+                if (maxDigits > 1 && idx != null && idx > groups.size()) {
+                    idx = parseIntPrefix(replacement.substring(position, Math.min(replacement.length(), position + maxDigits - 1)));
+                }
+                if (idx != null) {
+                    if (groups.size() > 0 && idx - 1 >= 0 && idx - 1 < groups.size()) {
+                        Object submatch = groups.get(idx - 1);
+                        if (submatch != null) {
+                            substitute.append(submatch);
+                        }
+                    }
+                    position += idx.toString().length();
+                } else {
+                    // not a capture group, treat the $ as literal
+                    substitute.append('$');
+                }
             }
+            index = replacement.indexOf('$', position);
         }
-        return r;
+        substitute.append(replacement.substring(Math.min(position, replacement.length())));
+        return substitute.toString();
+    }
+
+    /** JavaScript parseInt(s, 10) for the digit prefix of s (null for NaN) */
+    static Integer parseIntPrefix(String s) {
+        int i = 0;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9')
+            i++;
+        if (i == 0)
+            return null;
+        return Integer.valueOf(s.substring(0, i));
     }
 
     /**
-     * Converts Java MatchResult to the Jsonata object format
-     * @param mr
-     * @return
+     * Match a string with a regex returning an array of object containing details of each match
+     * @param {String} str - string
+     * @param {String} pattern - the substring/regex applied to the string
+     * @param {String} replacement - text to replace the matched substrings
+     * @param {Integer} [limit] - max number of matches to return
+     * @returns {Array} The array of match objects
      */
-    static Map toJsonataMatch(MatchResult mr) {
-        Map obj = new LinkedHashMap<>();
-        obj.put("match", mr.group());
-
-        List groups = new ArrayList<>();
-        for (int i=0; i<=mr.groupCount(); i++)
-            groups.add(mr.group(i));
-
-        obj.put("groups", groups);
-
-        return obj;
-    }
-
-    /**
-     * Regexp Replace with replacer function
-     * @param s
-     * @param pattern
-     * @param fn
-     * @return
-     */
-    static String safeReplaceAllFn(String s, Pattern pattern, Object fn) {
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        r = m.replaceAll(t -> { try {
-            Object res = funcApply(fn, List.of(toJsonataMatch(t)));
-            if (res instanceof String)
-                return (String)res;
-            else
-                return null;
-        } catch (Throwable e) {
-            e.printStackTrace();
-        }
-        return null;
-        });
-        return r;
-    }
-
-    /**
-     * Safe replaceFirst
-     * 
-     * @param s
-     * @param pattern
-     * @param replacement
-     * @return
-     */
-    static String safeReplaceFirst(String s, Pattern pattern, String replacement) {
-        replacement = safeReplacement(replacement);
-        Matcher m = pattern.matcher(s);
-        String r = null;
-        for (int i=0; i<10; i++) {
-            try {
-                r = m.replaceFirst(replacement);
-                break;
-            } catch (IndexOutOfBoundsException e) {
-                String msg = e.getMessage();
-
-                // Message we understand needs to be:
-                // No group X
-                if (!msg.contains("No group")) throw e;
-
-                // Adjust replacement to remove the non-existing group
-                String g = "" + msg.charAt(msg.length()-1);
-
-                replacement = replacement.replace("$"+g, "");
-            }
-        }
-        return r;
-    }
-
-    public static String replace(String str, Object pattern, Object replacement, Integer limit) {
+    public static String replace(String str, Object pattern, Object replacement, Number limit) throws Throwable {
+        // undefined inputs always return undefined
         if (str == null || pattern == null) {
             return null;
         }
-        if (pattern instanceof String)
-          if (((String)pattern).isEmpty())
-            throw new JException("Second argument of replace function cannot be an empty string", 0);
-        if (limit == null) {
-          if (pattern instanceof String) {
-              return str.replace((String)pattern, (String)replacement);
-          } else {
-              return safeReplaceAll(str, (Pattern)pattern, replacement);
-          }
-        } else {
-          
-          if (limit<0)
-            throw new JException("Fourth argument of replace function must evaluate to a positive number", 0);
-          
-          for (int i=0; i<limit; i++)
-            if (pattern instanceof String) {
-                str = str.replaceFirst((String)pattern, (String)replacement);
-            } else {
-                str = safeReplaceFirst(str, (Pattern)pattern, (String)replacement);
-            }
-          return str;
+
+        // pattern cannot be an empty string
+        if ("".equals(pattern)) {
+            throw new JException("D3010", -1, pattern);
         }
+
+        // limit, if specified, must be a non-negative number
+        if (limit != null && limit.doubleValue() < 0) {
+            throw new JException("D3011", -1, limit);
+        }
+
+        StringBuilder result = new StringBuilder();
+        int position = 0;
+
+        if (limit == null || limit.doubleValue() > 0) {
+            int count = 0;
+            if (pattern instanceof String) {
+                String pat = (String) pattern;
+                int index = str.indexOf(pat, position);
+                while (index != -1 && (limit == null || count < limit.doubleValue())) {
+                    result.append(str, position, index);
+                    result.append(replacement);
+                    position = index + pat.length();
+                    count++;
+                    index = str.indexOf(pat, position);
+                }
+                result.append(str.substring(position));
+            } else {
+                var matches = evaluateMatcher(pattern, str);
+                if (matches != null) {
+                    while (matches != null && (limit == null || count < limit.doubleValue())) {
+                        int start = intOf(matches.get("start"));
+                        result.append(str, position, start);
+                        Object replacedWith = replacement instanceof String
+                                ? substitute((String) replacement, matches)
+                                : funcApply(replacement, new ArrayList<>(List.of(matches)));
+                        // check replacedWith is a string
+                        if (replacedWith instanceof String) {
+                            result.append(replacedWith);
+                        } else {
+                            // not a string - throw error
+                            throw new JException("D3012", -1, replacedWith);
+                        }
+                        position = start + ((String) matches.get("match")).length();
+                        count++;
+                        matches = nextMatch(matches);
+                    }
+                    result.append(str.substring(position));
+                } else {
+                    result.append(str);
+                }
+            }
+        } else {
+            result.append(str);
+        }
+        return result.toString();
     }
-
-
 
     /**
      * Base64 encode a string
@@ -1041,34 +1052,49 @@ public class Functions {
         }
     }
 
-    public static List<String> split(String str, Object pattern, Number limit) {
+    public static List<String> split(String str, Object pattern, Number limit) throws Throwable {
         if (str==null || pattern==null)
             return null;
 
-        if (limit!=null && limit.intValue()<0)
+        // limit, if specified, must be a non-negative number
+        if (limit!=null && limit.doubleValue()<0)
             throw new JException("D3020", -1, str);
 
         List<String> result = new ArrayList<>();
-        if (limit!=null && limit.intValue()==0)
-            return result;
 
-        if (pattern instanceof String) {
-            String sep = (String)pattern;
-            if (sep.isEmpty()) {
-                // $split("str", ""): Split string into characters
-                int l = limit!=null ? limit.intValue() : Integer.MAX_VALUE;
-                for (int i=0; i<str.length() && i<l; i++) {
-                    result.add( ""+str.charAt(i) );
+        if (limit == null || limit.doubleValue() > 0) {
+            if (pattern instanceof String) {
+                // JavaScript String.prototype.split(separator, limit)
+                String sep = (String)pattern;
+                long l = limit != null ? (long) limit.doubleValue() : Long.MAX_VALUE;
+                if (sep.isEmpty()) {
+                    for (int i=0; i<str.length() && i<l; i++)
+                        result.add(""+str.charAt(i));
+                } else {
+                    for (String part : str.split(Pattern.quote(sep), -1)) {
+                        if (result.size() >= l)
+                            break;
+                        result.add(part);
+                    }
                 }
             } else {
-                // Quote separator string + preserve trailing empty strings (-1)
-                result = Arrays.asList( str.split( Pattern.quote(sep), -1) );
+                int count = 0;
+                var matches = evaluateMatcher(pattern, str);
+                if (matches != null) {
+                    int start = 0;
+                    while (matches != null && (limit == null || count < limit.doubleValue())) {
+                        result.add(str.substring(start, intOf(matches.get("start"))));
+                        start = intOf(matches.get("end"));
+                        matches = nextMatch(matches);
+                        count++;
+                    }
+                    if (limit == null || count < limit.doubleValue()) {
+                        result.add(str.substring(start));
+                    }
+                } else {
+                    result.add(str);
+                }
             }
-        } else {
-            result = Arrays.asList( ((Pattern)pattern).split(str, -1) );
-        }
-        if (limit!=null && limit.intValue()<result.size()) {
-            result = result.subList(0, limit.intValue());
         }
         return result;
     }
@@ -1497,7 +1523,20 @@ public class Functions {
 
     public static int getFunctionArity(Object func) {
         if (func instanceof JFunction) {
-            return ((JFunction)func).signature.getMinNumberOfArgs();
+            JFunction f = (JFunction)func;
+            if (f.signature != null)
+                return f.signature.getMinNumberOfArgs();
+            // no signature: number of declared Java parameters if known, else the value only
+            return f.method != null ? f.getNumberOfArgs() : 1;
+        } else if (func instanceof Pattern) {
+            // regex matcher closure function(str, fromIndex)
+            return 2;
+        } else if (func instanceof Jsonata.Fn0) {
+            return 0;
+        } else if (func instanceof Jsonata.Fn2) {
+            return 2;
+        } else if (func instanceof Jsonata.JLambda) {
+            return 1;
         } else {
             // Lambda
             return ((Symbol)func).arguments.size();
@@ -1536,7 +1575,7 @@ public class Functions {
      */
     public static Object funcApply(Object func, List funcArgs) throws Throwable {
         Object res;
-        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda)
+        if (isLambda(func) || func instanceof JFunction || func instanceof Jsonata.JLambda || func instanceof Pattern)
             // like jsonata-js: native and host functions called from higher-order functions are
             // validated against their signature (e.g. $map([null], $uppercase) -> T0410)
             res = Jsonata.current.get().apply(func, funcArgs, null, Jsonata.current.get().environment);
