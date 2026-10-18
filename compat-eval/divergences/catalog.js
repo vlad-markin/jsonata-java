@@ -156,10 +156,10 @@ module.exports = [
         note: 'Видно только через JSON с -0 или 1/x; JSON.stringify(-0) = "0". Считать исключением',
     },
     {
-        id: 'NUM-10', cat: 'number', severity: 'low', solution: 'exception', complexity: 'S',
+        id: 'NUM-10', cat: 'number', severity: 'low', solution: 'engine', complexity: 'S',
         title: 'Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D3121',
         cases: [{ expr: '1/0' }, { expr: "$eval('1/0')" }, { expr: '5 % 0' }, { expr: '$string(1/0)' }],
-        note: 'Результат JS не сериализуется в JSON. Ошибка в JVM полезнее; считать исключением',
+        note: 'Исправлено как в JS: Infinity/NaN — результат, D1001 только при использовании как операнда, $string — D3001',
     },
     {
         id: 'NUM-11', cat: 'number', severity: 'low', solution: 'exception', complexity: 'S',
@@ -279,6 +279,12 @@ module.exports = [
         title: '`$toMillis(str, picture)` с `[Z]`: jsonata-js читает отрицательный пояс с минутами неверно (`-0530` → -04:30). В JVM сохранено поведение JS, потому что пояс приходит из данных и переписыванием выражения расхождение не закрыть',
         cases: [{ expr: "$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')" }],
         note: 'Сейчас совпадает с JS. Если важнее корректность, это одна строка в DateTimeUtils (см. вопрос в REPORT.md)',
+    },
+    {
+        id: 'API-08', fixedBy: 'CompatJs222Test.api08_callbacksNotReachableFromExpression', cat: 'api', severity: 'medium', solution: 'engine', complexity: 'S',
+        title: 'Колбэки вычисления (`__evaluate_entry/exit`, а значит и `setRuntimeBounds`) хранились как обычные переменные: выражение могло их отключить (`$__evaluate_entry := $nothing`) или уронить вычисление. В JS ключи — Symbol и из выражения недоступны',
+        evidence: 'phase5/control.md (проба B6)',
+        cases: [],
     },
     // ------------------------------------------------------------------ order
     {

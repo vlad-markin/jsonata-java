@@ -52,6 +52,6 @@ java -cp jvm/target/classes compat.migration.Migrate [--rewrite] [--all] [--warn
 `node migration/verify.js cases.jsonl out/dir`: строит AST, переписывает выражения и прогоняет
 diff-runner, где jsonata-js вычисляет исходное `expr`, а JVM — переписанное (`exprJvm`).
 Результат для DT-05: **352 из 352** переписанных выражений эквивалентны (7 шаблонов × 11 поясов ×
-6 моментов времени, `$now`, вход из данных); `out/verify-dt05/verify-summary.json`.
+6 моментов времени, `$now`, вход из данных); `migration/verify-dt05-summary.json` (копия `out/verify-dt05/verify-summary.json`).
 
 Прогон детектора по test-suite 2.2.2 и 8000 выражениям фаззинга (9686 выражений) занимает 1,9 с.
