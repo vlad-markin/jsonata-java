@@ -2011,31 +2011,27 @@ public class Jsonata {
 
         //var body = "function($a,$c) { $substring($a,0,$c) }";
 
+        // number of parameters of the native function: declared Java parameters, else the
+        // signature, else the number of supplied arguments (host functions without signature)
+        int nargs = _native.getNumberOfArgs();
+        if (_native.method == null)
+            nargs = _native.signature != null ? _native.signature.getNumberOfArgs() : args.size();
+        nargs = Math.max(nargs, args.size());
         List sigArgs = new ArrayList<>();
-        List partArgs = new ArrayList<>();
-        for (int i=0; i<_native.getNumberOfArgs(); i++) {
-            String argName = "$" + (char)('a'+i);
-            sigArgs.add(argName);
-            if (i>=args.size() || args.get(i)==null)
-                partArgs.add(argName);
-            else
-                partArgs.add(args.get(i));
-        }
+        for (int i=0; i<nargs; i++)
+            sigArgs.add("$" + (char)('a'+i));
 
+        // the trampoline calls the function object itself (bound as $__native in the closure),
+        // so it works for unnamed host functions too
         var body = "function(" + String.join(", ", sigArgs) + "){";
-        body += "$"+_native.functionName+"("+String.join(", ", sigArgs) + ") }";
+        body += "$__native("+String.join(", ", sigArgs) + ") }";
 
         if (parser.dbg) System.out.println("partial trampoline = "+body);
 
-        //  var sigArgs = getNativeFunctionArguments(_native);
-        //  sigArgs = sigArgs.stream().map(sigArg -> {
-        //      return "$" + sigArg;
-        //  }).toList();
-        //  var body = "function(" + String.join(", ", sigArgs) + "){ _ }";
         var bodyAST = parser.parse(body);
-        //bodyAST.body = _native;
 
-        var partial = partialApplyProcedure(bodyAST, (List)args);
+        var partial = (Symbol) partialApplyProcedure(bodyAST, (List)args);
+        partial.environment.bind("__native", _native);
         return partial;
     }
  

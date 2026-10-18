@@ -274,4 +274,21 @@ public class CompatJs222Test {
         assertEquals("D3010", err("$replace('abc', '', 'x')"));
         assertEquals("D3011", err("$replace('abc', 'b', 'x', -1)"));
     }
+
+    /** API-03: partial application of host functions; host functions without signature in HOFs. */
+    @Test
+    public void api03_hostFunctionsPartialAndHof() {
+        Jsonata e = jsonata("$ap($ap(?, 'x'), function($s){$s & $s})");
+        e.registerFunction("ap", new Jsonata.JFunction((input, args) -> {
+            try {
+                return Functions.funcApply(args.get(0), List.of(args.get(1)));
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        }, null));
+        assertEquals("xx", e.evaluate(null));
+        Jsonata e2 = jsonata("$map(['a','b'], $echo)");
+        e2.registerFunction("echo", new Jsonata.JFunction((input, args) -> args.get(0), null));
+        assertEquals(List.of("a", "b"), e2.evaluate(null));
+    }
 }
