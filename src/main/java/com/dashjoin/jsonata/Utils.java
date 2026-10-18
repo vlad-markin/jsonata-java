@@ -129,6 +129,46 @@ public class Utils {
         return o == null ? Jsonata.NULL_VALUE : o;
     }
 
+    /**
+     * Formats a double exactly like ECMAScript Number.prototype.toString
+     * (shortest round-trip digits, plain notation for 1e-7 &lt; |d| &lt; 1e21, otherwise "1e+21" style).
+     */
+    public static String jsNumberToString(double d) {
+        if (Double.isNaN(d)) return "NaN";
+        if (Double.isInfinite(d)) return d > 0 ? "Infinity" : "-Infinity";
+        if (d == 0) return "0";
+        String sign = d < 0 ? "-" : "";
+        // Double.toString gives the shortest uniquely identifying digits (JDK 19+, JDK-4511638);
+        // on older JDKs the result may contain one superfluous digit in rare cases
+        java.math.BigDecimal bd = new java.math.BigDecimal(Double.toString(Math.abs(d))).stripTrailingZeros();
+        if (bd.precision() == 2) {
+            // Double.toString always prints two digits in E notation (4.9E-324); JS prints 5e-324
+            java.math.BigDecimal one = bd.round(new java.math.MathContext(1, java.math.RoundingMode.HALF_EVEN));
+            if (one.doubleValue() == Math.abs(d))
+                bd = one.stripTrailingZeros();
+        }
+        String digits = bd.unscaledValue().toString();
+        int k = digits.length();
+        int n = k - bd.scale();
+        StringBuilder b = new StringBuilder(sign);
+        if (k <= n && n <= 21) {
+            b.append(digits);
+            for (int z = 0; z < n - k; z++) b.append('0');
+        } else if (0 < n && n <= 21) {
+            b.append(digits, 0, n).append('.').append(digits, n, k);
+        } else if (-6 < n && n <= 0) {
+            b.append("0.");
+            for (int z = 0; z < -n; z++) b.append('0');
+            b.append(digits);
+        } else {
+            int e = n - 1;
+            b.append(digits.charAt(0));
+            if (k > 1) b.append('.').append(digits, 1, k);
+            b.append('e').append(e < 0 ? '-' : '+').append(Math.abs(e));
+        }
+        return b.toString();
+    }
+
     public static boolean isFunction(Object o) {
         return o instanceof JFunction || o instanceof JFunctionCallable;
     }

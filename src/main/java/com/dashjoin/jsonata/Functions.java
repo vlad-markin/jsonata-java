@@ -195,22 +195,13 @@ public class Functions {
             return;
         }
 
-        if (arg instanceof Double) {
-          double d = ((Double)arg).doubleValue();
-          if (d % 1 == 0 && Long.MIN_VALUE < d && d <= Long.MAX_VALUE) {
-              b.append(Math.round(d)); return;
-          }
-            
-          // TODO: this really should be in the jackson serializer
-          BigDecimal bd = new BigDecimal((Double)arg, new MathContext(15));
-          String res = bd.stripTrailingZeros().toString();
-          
-          if (res.indexOf("E+") > 0)
-            res = res.replace("E+", "e+");
-          if (res.indexOf("E-") > 0)
-            res = res.replace("E-", "e-");
-          
-            b.append(res); return;
+        if (arg instanceof Double || arg instanceof Float) {
+          // jsonata-js: integers as String(n), other numbers as Number(n.toPrecision(15)),
+          // both formatted like ECMAScript Number#toString (plain digits below 1e21)
+          double d = ((Number)arg).doubleValue();
+          if (Double.isFinite(d) && d % 1 != 0)
+            d = new BigDecimal(d, new MathContext(15)).doubleValue();
+          b.append(Utils.jsNumberToString(d)); return;
         }
 
         if (arg instanceof Number || arg instanceof Boolean) {

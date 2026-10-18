@@ -158,4 +158,18 @@ public class CompatJs222Test {
         assertEquals("T0410", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
                 () -> jsonata("$map([null], $uppercase)").evaluate(null)).getError());
     }
+
+    /** NUM-02: numbers are stringified like jsonata-js (ECMAScript Number#toString, 15 significant digits). */
+    @Test
+    public void num02_numberToString() {
+        assertEquals("100000000000000000000", jsonata("$string(1e20)").evaluate(null));
+        assertEquals("1e+21", jsonata("$string(1e21)").evaluate(null));
+        assertEquals("12345678901234567000", jsonata("12345678901234567890 & ''").evaluate(null));
+        assertEquals("18446744073709552000", jsonata("$string($power(2, 64))").evaluate(null));
+        assertEquals("0.3", jsonata("$string(0.1 + 0.2)").evaluate(null));
+        assertEquals("1e-7", jsonata("$string(1e-7)").evaluate(null));
+        assertEquals("0.000001", jsonata("$string(1e-6)").evaluate(null));
+        assertEquals("5e-324", jsonata("$string(5e-324)").evaluate(null));
+        assertEquals("[1.5,100000000000000000000]", jsonata("$string([1.5, 1e20])").evaluate(null));
+    }
 }

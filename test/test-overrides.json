@@ -131,11 +131,6 @@
             "reason": "Ignore formatDateTime cases + differences in Week 5 of Jan vs Week 0 of Feb"
         },
         { 
-            "name": "function-string/case006.json",
-            "alternateResult": "1e+20",
-            "reason": "toString precision should be 15, handled differently by Java Bigdecimal(..., new MathContext(15)"
-        },
-        { 
             "name": "function-applications/case008.json",
             "ignoreError": true,
             "reason": "Exception instead null/empty result. OK because the path has no match so NULL_VALUE is used as argument for $substringAfter"
