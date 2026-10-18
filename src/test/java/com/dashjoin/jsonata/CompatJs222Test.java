@@ -613,4 +613,68 @@ public class CompatJs222Test {
         assertEquals("18:30 -05:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z]', '-0530')").evaluate(null));
         assertEquals("23:30 -00:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z01]', '-0030')").evaluate(null));
     }
+
+    /** SUITE-01: unterminated comment and invalid signatures raise S0106/S0401/S0402 like jsonata-js. */
+    @Test
+    public void suite01_parserErrors() {
+        JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("1 /* no end"));
+        assertEquals("S0106", e.getError());
+        e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("\u03bb($arg)<n<n>>{$arg}(5)"));
+        assertEquals("S0401", e.getError());
+        assertEquals(10, e.getLocation());
+        e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("\u03bb($arr)<(sa<n>)>>{$arr}([[1]])"));
+        assertEquals("S0402", e.getError());
+        assertEquals(9, e.getLocation());
+    }
+
+    /** NUM-10: Infinity/NaN results like jsonata-js (D1001 only when used as operand, D3001 in $string). */
+    @Test
+    public void num10_nonFiniteResults() {
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("1/0").evaluate(null));
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("$eval('1/0')").evaluate(null));
+        assertEquals(Double.POSITIVE_INFINITY, jsonata("$sum([1/0])").evaluate(null));
+        assertEquals(Double.NaN, jsonata("5 % 0").evaluate(null));
+        assertEquals("D3001", err("$string(1/0)"));
+        assertEquals("D1001", err("$string({'a': 1/0})"));
+        assertEquals("D1001", err("1/0 + 1"));
+    }
+
+    /** UND-01: $each passes JSON null values of a host map (Java null) to the function. */
+    @Test
+    public void und01_eachNullValue() {
+        Jsonata e = jsonata("$each(obj, function($v){$v})");
+        e.setOutputConvertNulls(false);
+        Map<String, Object> obj = new LinkedHashMap<>();
+        obj.put("a", null);
+        obj.put("b", 1);
+        assertEquals(List.of(Jsonata.NULL_VALUE, 1), e.evaluate(Map.of("obj", obj)));
+    }
+
+    /** NUM-02: integers beyond 2^53 are stringified from their double value like jsonata-js. */
+    @Test
+    public void num02_largeIntegersToString() {
+        assertEquals("31525197391593470", jsonata("$string(3.5 * 9007199254740993)").evaluate(null));
+        assertEquals("9007199254740992", jsonata("$string(n)").evaluate(Map.of("n", 9007199254740993L)));
+        assertEquals("[12345678901234567000]", jsonata("$string([n])").evaluate(Map.of("n", 12345678901234567890d)));
+    }
+
+    /** ERR-01: an error raised while applying a function (e.g. in a $sort comparator) is reported at the call. */
+    @Test
+    public void err01_positionOfFunctionCall() {
+        assertEquals(6, ex("$sort([1, 'a'], function($l,$r){$l > $r})", null).getLocation());
+        assertEquals(8, ex("$reduce(['a','b'], function($a, $b){$a * $b})", null).getLocation());
+    }
+
+    /** API-08: evaluation callbacks / runtime bounds cannot be replaced from inside the expression. */
+    @Test
+    public void api08_callbacksNotReachableFromExpression() {
+        Jsonata e = jsonata("($__evaluate_entry := 1; [1..5] ~> $count)");
+        Jsonata.Frame f = e.createFrame();
+        f.setRuntimeBounds(1000, 1000);
+        assertEquals(5, e.evaluate(null, f));
+        Jsonata loop = jsonata("($__evaluate_entry := $nothing; $f := function($n){$n = 0 ? 0 : $f($n - 1)}; $f(100000000))");
+        Jsonata.Frame f2 = loop.createFrame();
+        f2.setRuntimeBounds(200, 100000);
+        assertEquals("U1001", org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> loop.evaluate(null, f2)).getError());
+    }
 }

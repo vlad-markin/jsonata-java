@@ -202,12 +202,20 @@ public class Functions {
           // both formatted like ECMAScript Number#toString (plain digits below 1e21)
           double d = ((Number)arg).doubleValue();
           if (!Double.isFinite(d)) {
-            // JSON.stringify
+            // jsonata-js replacer calls isNumeric: Infinity raises D1001, NaN stringifies as null
+            if (Double.isInfinite(d))
+              throw new JException("D1001", -1, d);
             b.append("null"); return;
           }
           if (d % 1 != 0)
             d = new BigDecimal(d, new MathContext(15)).doubleValue();
           b.append(Utils.jsNumberToString(d)); return;
+        }
+
+        if ((arg instanceof Long && Math.abs((Long) arg) > 9007199254740992L)
+                || (arg instanceof java.math.BigInteger && ((java.math.BigInteger) arg).abs().bitLength() > 53)) {
+            // beyond 2^53 jsonata-js only has the double value: format it like Number#toString
+            b.append(Utils.jsNumberToString(((Number) arg).doubleValue())); return;
         }
 
         if (arg instanceof Number || arg instanceof Boolean) {
@@ -1747,7 +1755,9 @@ public class Functions {
         var result = createSequence();
 
         for (var key : obj.keySet()) {
-            var func_args = hofFuncArgs(func, obj.get(key), key, obj);
+            // a Java null inside a host map is JSON null (like in $sift / paths)
+            Object value = obj.get(key);
+            var func_args = hofFuncArgs(func, value == null ? Jsonata.NULL_VALUE : value, key, obj);
             // invoke func
             var val = funcApply(func, func_args);
             if(val != null) {
@@ -2101,8 +2111,8 @@ public class Functions {
         
         try {
             Object res = m.invoke(null, callArgs.toArray());
-            // NaN (e.g. from $parseInteger) is passed on like in jsonata-js
-            if (res instanceof Number && !(res instanceof Double && ((Double) res).isNaN()))
+            // NaN / Infinity (e.g. $parseInteger, $sum([1/0]), $eval('1/0')) are passed on like in jsonata-js
+            if (res instanceof Number && !(res instanceof Double && !Double.isFinite((Double) res)))
                 res = Utils.convertNumber((Number)res);
             return res;
         } catch (IllegalAccessException e) {

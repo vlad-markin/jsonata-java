@@ -1,0 +1,67 @@
+## CPU samples: 413
+
+### top self frames
+
+ 35.1%  java/util/Arrays.copyOf
+ 27.6%  java/util/HashMap.getNode
+ 18.6%  com/dashjoin/jsonata/Jsonata._evaluate
+  8.7%  com/dashjoin/jsonata/Functions.append
+  2.9%  com/dashjoin/jsonata/Jsonata.evaluate
+  1.9%  com/dashjoin/jsonata/Functions.validateInput
+  1.5%  com/dashjoin/jsonata/Jsonata.evaluateStep
+  1.5%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+  0.7%  java/util/ArrayList$Itr.next
+  0.5%  com/dashjoin/jsonata/Jsonata.evaluatePath
+  0.2%  java/util/regex/Matcher.<init>
+  0.2%  com/dashjoin/jsonata/Utils.convertNulls
+  0.2%  java/util/stream/DoublePipeline.sum
+  0.2%  java/lang/String.hashCode
+
+### top inclusive frames
+
+100.0%  com/dashjoin/jsonata/Jsonata.evaluate
+100.0%  compat/bench/Bench.main
+ 97.1%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+ 97.1%  com/dashjoin/jsonata/Jsonata._evaluate
+ 97.1%  com/dashjoin/jsonata/Jsonata.evaluatePath
+ 78.0%  com/dashjoin/jsonata/Jsonata.evaluateUnary
+ 43.1%  com/dashjoin/jsonata/Functions.append
+ 35.1%  java/util/Arrays.copyOf
+ 34.4%  java/util/ArrayList.addAll
+ 34.4%  com/dashjoin/jsonata/Utils$JList.addAll
+ 33.2%  java/util/ArrayList.grow
+ 29.1%  com/dashjoin/jsonata/Jsonata.evaluateStep
+ 27.6%  java/util/HashMap.getNode
+ 26.9%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+ 24.5%  java/util/LinkedHashMap.get
+ 23.2%  com/dashjoin/jsonata/Jsonata.evaluateName
+ 23.2%  com/dashjoin/jsonata/Functions.lookup
+  3.1%  com/dashjoin/jsonata/Jsonata$Frame.lookup
+  3.1%  java/util/HashMap.containsKey
+  2.7%  com/dashjoin/jsonata/Functions.validateInput
+  1.9%  java/util/ArrayList.toArray
+  0.7%  java/util/ArrayList$Itr.next
+  0.7%  java/util/ArrayList.add
+  0.7%  com/dashjoin/jsonata/Utils$JList.add
+  0.5%  com/dashjoin/jsonata/Jsonata.applyInner
+
+### top allocated types (sampled weight, total 82624 MB)
+
+ 99.0%  [Ljava/lang/Object;
+  0.6%  com/dashjoin/jsonata/Jsonata$GroupEntry
+  0.3%  com/dashjoin/jsonata/Utils$JList
+  0.0%  java/util/Arrays$ArrayList
+  0.0%  java/util/LinkedHashMap$LinkedEntryIterator
+  0.0%  java/util/ArrayList$Itr
+
+### top allocation sites (first non-JDK-collection frame)
+
+ 76.8%  java/util/Arrays.copyOf
+ 22.2%  java/util/ArrayList.<init>
+  0.6%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+  0.3%  com/dashjoin/jsonata/Functions.append
+  0.0%  java/util/ArrayList.grow
+  0.0%  com/dashjoin/jsonata/Utils.__createSequence
+  0.0%  java/util/Arrays.asList
+  0.0%  java/util/LinkedHashMap$LinkedEntrySet.iterator
+  0.0%  java/util/ArrayList.iterator

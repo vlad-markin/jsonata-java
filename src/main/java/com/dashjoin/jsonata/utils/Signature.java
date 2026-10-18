@@ -234,7 +234,7 @@ public class Signature implements Serializable {
                         _param.regex = ( "[" + choice + "m]");
                     } else {
                         // TODO harder
-                        throw new RuntimeException("Choice groups containing parameterized types are not supported");
+                        throw new JException("S0402", position, choice); // location = offset in the signature, see Parser
                     }
                     _param.type = ( "(" + choice + ")");
                     position = endParen;
@@ -251,10 +251,10 @@ public class Signature implements Serializable {
                             _prevParam.subtype = signature.substring(position + 1, endPos);
                             position = endPos;
                         } else {
-                            throw new RuntimeException("Type parameters can only be applied to functions and arrays");
+                            throw new JException("S0401", position, type); // location = offset in the signature, see Parser
                         }
                     } else {
-                        throw new RuntimeException("Type parameters can only be applied to functions and arrays");
+                        throw new JException("S0401", position, test); // location = offset in the signature, see Parser
                     }
                     break;
                 }
@@ -318,9 +318,10 @@ public class Signature implements Serializable {
         var result = new ArrayList<>();
 
         var args = (List)_args;
-        String suppliedSig = "";
+        StringBuilder _sb = new StringBuilder();
         for (Object arg : args)
-            suppliedSig += getSymbol(arg);
+            _sb.append(getSymbol(arg));
+        String suppliedSig = _sb.toString();
         
         Matcher isValid = _regex.matcher(suppliedSig);
         if (isValid != null && isValid.matches()) {
@@ -337,7 +338,7 @@ public class Signature implements Serializable {
                         // first check that the context value is the right type
                         var contextType = getSymbol(context);
                         // test contextType against the regex for this arg (without the trailing ?)
-                        if (Pattern.matches(param.regex, contextType)) {
+                        if (cachedPattern(param.regex).matcher(contextType).matches()) {
                         //if (param.contextRegex.test(contextType)) {
                             validatedArgs.add(context);
                         } else {
@@ -354,7 +355,7 @@ public class Signature implements Serializable {
                 } else {
                     // may have matched multiple args (if the regex ends with a '+'
                     // split into single tokens
-                    String[] singles = match.split("");
+                    String[] singles = splitChars(match);
                     for (String single : singles) {
                     //match.split('').forEach(function (single) {
                         if (param.type.equals("a")) {
@@ -470,7 +471,7 @@ public class Signature implements Serializable {
                 } else {
                     // may have matched multiple args (if the regex ends with a '+'
                     // split into single tokens
-                    String[] singles = match.split("");
+                    String[] singles = splitChars(match);
                     for (String single : singles) {
                         if ("a".equals(param.get("type").asText())) {
                             if ("m".equals(single)) {
@@ -538,4 +539,13 @@ public class Signature implements Serializable {
         return result;
     };
 */
+
+    // helpers (avoid String.split("") / Pattern.matches compiling a pattern per call)
+    static String[] splitChars(String m) {
+        String[] r = new String[m.length()];
+        for (int i = 0; i < r.length; i++) r[i] = String.valueOf(m.charAt(i));
+        return r;
+    }
+    static final java.util.concurrent.ConcurrentHashMap<String, Pattern> PCACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    static Pattern cachedPattern(String re) { return PCACHE.computeIfAbsent(re, Pattern::compile); }
 }

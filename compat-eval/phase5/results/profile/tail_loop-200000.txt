@@ -1,0 +1,95 @@
+## CPU samples: 1445
+
+### top self frames
+
+ 57.3%  com/dashjoin/jsonata/Functions.validateInput
+ 14.2%  com/dashjoin/jsonata/Jsonata._evaluate
+  9.3%  java/util/HashMap.getNode
+  4.6%  java/lang/StringConcatHelper.newStringOf
+  2.8%  com/dashjoin/jsonata/Jsonata.apply
+  2.2%  com/dashjoin/jsonata/Jsonata.evaluate
+  1.4%  java/lang/String.valueOf
+  1.2%  java/util/HashMap.putVal
+  1.0%  com/dashjoin/jsonata/Jsonata.evaluateCondition
+  1.0%  java/lang/String.hashCode
+  0.6%  com/dashjoin/jsonata/Jsonata$Frame.lookup
+  0.6%  java/lang/Double.isFinite
+  0.6%  com/dashjoin/jsonata/Jsonata.applyProcedure
+  0.5%  java/util/ArrayList$Itr.next
+  0.5%  java/util/ArrayList.addAll
+  0.4%  com/dashjoin/jsonata/Jsonata.evaluateLambda
+  0.4%  com/dashjoin/jsonata/Jsonata.evaluateVariable
+  0.3%  java/util/Arrays.copyOf
+  0.3%  com/dashjoin/jsonata/Jsonata.evaluateBinary
+  0.2%  java/util/LinkedHashMap.sequencedEntrySet
+  0.1%  java/lang/ThreadLocal$ThreadLocalMap.getEntry
+  0.1%  java/lang/String.equals
+  0.1%  java/lang/StringLatin1.hashCode
+  0.1%  java/lang/ThreadLocal.get
+  0.1%  java/util/HashMap.resize
+
+### top inclusive frames
+
+100.0%  com/dashjoin/jsonata/Jsonata.evaluate
+100.0%  compat/bench/Bench.main
+ 58.0%  com/dashjoin/jsonata/Functions.validateInput
+ 42.0%  com/dashjoin/jsonata/Jsonata.evaluateBlock
+ 42.0%  com/dashjoin/jsonata/Jsonata._evaluate
+ 42.0%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+ 39.3%  com/dashjoin/jsonata/Jsonata.apply
+ 21.1%  com/dashjoin/jsonata/Jsonata.evaluateBinary
+ 16.7%  com/dashjoin/jsonata/Jsonata.applyInner
+ 16.7%  com/dashjoin/jsonata/Jsonata.applyProcedure
+ 11.3%  com/dashjoin/jsonata/Jsonata.evaluateCondition
+  9.3%  java/util/HashMap.getNode
+  8.1%  com/dashjoin/jsonata/Jsonata$Frame.lookup
+  6.4%  java/util/HashMap.containsKey
+  4.6%  java/lang/StringConcatHelper.newStringOf
+  4.6%  java/lang/invoke/DirectMethodHandle$Holder.invokeStatic
+  4.6%  java/lang/invoke/Invokers$Holder.linkToTargetMethod
+  2.9%  java/util/LinkedHashMap.get
+  2.7%  com/dashjoin/jsonata/Jsonata.evaluateStep
+  2.7%  com/dashjoin/jsonata/Jsonata.evaluatePath
+  2.5%  com/dashjoin/jsonata/Jsonata.evaluateVariable
+  1.9%  com/dashjoin/jsonata/Functions.lookup
+  1.9%  com/dashjoin/jsonata/Jsonata.evaluateName
+  1.4%  java/lang/String.valueOf
+  1.4%  com/dashjoin/jsonata/Jsonata$Frame.bind
+
+### top allocated types (sampled weight, total 8200 MB)
+
+ 32.9%  java/util/ArrayList$Itr
+ 17.7%  java/lang/String
+ 16.0%  [B
+ 14.6%  com/dashjoin/jsonata/Parser$Symbol
+ 13.3%  com/dashjoin/jsonata/Jsonata$Frame
+  3.8%  [Ljava/lang/Object;
+  0.7%  java/lang/Integer
+  0.3%  [Ljava/util/HashMap$Node;
+  0.2%  java/util/LinkedHashMap$LinkedEntrySet
+  0.2%  java/util/LinkedHashMap$Entry
+  0.2%  java/util/LinkedHashMap
+  0.0%  java/util/LinkedHashMap$LinkedEntryIterator
+  0.0%  java/lang/Double
+  0.0%  java/lang/Long
+  0.0%  java/util/ArrayList
+
+### top allocation sites (first non-JDK-collection frame)
+
+ 32.9%  java/util/ArrayList.iterator
+ 17.2%  java/lang/StringConcatHelper.newStringOf
+ 16.0%  java/lang/StringLatin1.toBytes
+ 14.6%  com/dashjoin/jsonata/Jsonata.evaluateLambda
+ 13.3%  com/dashjoin/jsonata/Jsonata.createFrame
+  3.1%  java/util/Arrays.copyOf
+  0.7%  java/util/ArrayList.grow
+  0.7%  java/lang/Integer.valueOf
+  0.5%  java/lang/String.valueOf
+  0.3%  java/util/HashMap.resize
+  0.2%  java/util/LinkedHashMap.sequencedEntrySet
+  0.2%  java/util/LinkedHashMap.newNode
+  0.2%  com/dashjoin/jsonata/Jsonata$Frame.<init>
+  0.0%  java/util/LinkedHashMap$LinkedEntrySet.iterator
+  0.0%  java/lang/Double.valueOf
+  0.0%  java/lang/Long.valueOf
+  0.0%  com/dashjoin/jsonata/Jsonata.apply

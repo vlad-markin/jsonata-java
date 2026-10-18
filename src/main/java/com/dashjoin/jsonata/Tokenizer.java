@@ -189,12 +189,12 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
             var commentStart = position;
             position += 2;
             currentChar = path.charAt(position);
-            while (!(currentChar == '*' && path.charAt(position + 1) == '/')) {
-                currentChar = path.charAt(++position);
-                if (position >= length) {
+            while (!(currentChar == '*' && position + 1 < length && path.charAt(position + 1) == '/')) {
+                if (++position >= length) {
                     // no closing tag
                     throw new JException("S0106", commentStart);
                 }
+                currentChar = path.charAt(position);
             }
             position += 2;
             currentChar = path.charAt(position);

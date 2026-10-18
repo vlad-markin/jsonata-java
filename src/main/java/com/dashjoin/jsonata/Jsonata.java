@@ -148,6 +148,8 @@ public class Jsonata {
 
         public long time;
 
+        Object entryCb, exitCb;
+
         public List<Object> createSequence() { return createSequence(Utils.NONE); }
 
         public List<Object> createSequence(Object el) {
@@ -277,7 +279,7 @@ public class Jsonata {
 
         environment.base.depth++;
         environment.base.guardrails();
-        var entryCallback = environment.lookup("__evaluate_entry");
+        var entryCallback = environment.base.entryCb;
         if(entryCallback!=null) {
             ((EntryCallback)entryCallback).callback(expr, input, environment);
         }
@@ -352,7 +354,7 @@ public class Jsonata {
             result = /* await */ evaluateGroupExpression(expr.group, result, environment);
         }
  
-        var exitCallback = environment.lookup("__evaluate_exit");
+        var exitCallback = environment.base.exitCb;
         if(exitCallback!=null) {
             ((ExitCallback)exitCallback).callback(expr, input, environment, result);
         }
@@ -694,7 +696,7 @@ public class Jsonata {
     Infix expr = (Infix)_expr;
         Object result = null;
         var lhs = /* await */ evaluate(expr.lhs, input, environment);
-        String op = ""+expr.value;
+        String op = expr.value instanceof String ? (String)expr.value : opString(expr.value);
 
         if (op.equals("and") || op.equals("or")) {
 
@@ -995,6 +997,10 @@ public class Jsonata {
                 result = lhs % rhs;
                 break;
         }
+        // like jsonata-js: Infinity / NaN are results here (1/0, x % 0); they raise D1001 only when
+        // used as an operand, and $string raises D3001
+        if (!Double.isFinite(result))
+            return result;
         return Utils.convertNumber(result);
     }
  
@@ -1005,14 +1011,15 @@ public class Jsonata {
       * @param {Object} op - opcode
       * @returns {*} Result
       */
+    static final String[] OPS = new String[128];
+    static { for (char c = 0; c < 128; c++) OPS[c] = String.valueOf(c); }
+    static String opString(Object v) { return v instanceof Character && (Character)v < 128 ? OPS[(Character)v] : ""+v; }
+
     Object evaluateEqualityExpression(Object lhs, Object rhs, String op) {
         Object result = null;
 
         // type checks
-        var ltype = lhs!=null ? lhs.getClass().getSimpleName() : null;
-        var rtype = rhs!=null ? rhs.getClass().getSimpleName() : null;
-
-        if (ltype == null || rtype == null) {
+        if (lhs == null || rhs == null) {
             // if either side is undefined, the result is false
             return false;
         }
@@ -1203,6 +1210,7 @@ public class Jsonata {
     static class GroupEntry {
         Object data;
         int exprIndex;
+        boolean owned; // data is a private accumulator list (no copy per added item)
     }
      
     /**
@@ -1258,7 +1266,10 @@ public class Jsonata {
                         }
 
                         // append it as an array
-                        groups.get(key).data = Functions.append(groups.get(key).data, item);
+                        GroupEntry g = groups.get(key);
+                        if (!g.owned) { g.data = Functions.append(g.data, item); g.owned = true; }
+                        else if (item instanceof List) ((List)g.data).addAll((List)item);
+                        else ((List)g.data).add(item);
                     } else {
                         groups.put(key, entry);
                     }
@@ -1844,9 +1855,12 @@ public class Jsonata {
              }
              result = /* await */ apply(proc, evaluatedArgs, input, environment);
          } catch (JException jex) {
-            if (jex.location<0) {
-                // add the position field to the error
-                jex.location = expr.position;
+            if (jex.location<0 || proc instanceof Symbol || proc instanceof JFunction) {
+                // add the position field to the error; like jsonata-js applyInner
+                // (err.position = proc.position), an error raised while applying a lambda or a
+                // native/registered function is reported at the position of this call
+                // (for a lambda: its position property, i.e. the most recent call of that lambda)
+                jex.location = proc instanceof Symbol && ((Symbol)proc).position > 0 ? ((Symbol)proc).position : expr.position;
             }
             if (jex.current==null) {
                 // and the Object identifier
@@ -2843,6 +2857,8 @@ public class Jsonata {
         exec_env.depth = 0;
         // debug-api: attach (or detach) the debugger for this evaluation
         exec_env.debugHook = bindings != null ? bindings.debugHook : null;
+        exec_env.entryCb = exec_env.lookup("__evaluate_entry");
+        exec_env.exitCb = exec_env.lookup("__evaluate_exit");
 
         if (validateInput)
             Functions.validateInput(input);

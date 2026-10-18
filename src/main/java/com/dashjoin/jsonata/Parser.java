@@ -638,6 +638,7 @@ public class Parser implements Serializable {
                 this.type = "lambda";
                 // is the next token a '<' - if so, parse the function signature
                 if (node.id.equals("<")) {
+                    int sigPos = node.position;
                     int depth = 1;
                     String sig = "<";
                     while (depth > 0 && !node.id.equals("{") && !node.id.equals("(end)")) {
@@ -650,7 +651,14 @@ public class Parser implements Serializable {
                         sig += tok.value;
                     }
                     advance(">");
-                    this.signature = new Signature(sig, "lambda");
+                    try {
+                        this.signature = new Signature(sig, "lambda");
+                    } catch (JException err) {
+                        // insert the position into this error (jsonata-js: sigPos + err.offset)
+                        if ("S0401".equals(err.getError()) || "S0402".equals(err.getError()))
+                            return handleError(new JException(err.getError(), sigPos + err.getLocation(), err.getCurrent()));
+                        throw err;
+                    }
                 }
                 // parse the function body
                 advance("{");

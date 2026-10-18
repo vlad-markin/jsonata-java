@@ -276,6 +276,11 @@ public final class Json {
         String sign = d < 0 ? "-" : "";
         // JDK >= 19: Double.toString yields the shortest uniquely-identifying decimal
         BigDecimal bd = new BigDecimal(Double.toString(Math.abs(d))).stripTrailingZeros();
+        if (bd.precision() == 2) {
+            // Double.toString prints at least two digits in E notation (4.9E-324); JS prints 5e-324
+            BigDecimal one = bd.round(new java.math.MathContext(1, java.math.RoundingMode.HALF_EVEN));
+            if (one.doubleValue() == Math.abs(d)) bd = one.stripTrailingZeros();
+        }
         String digits = bd.unscaledValue().toString();
         int k = digits.length();
         int n = k - bd.scale();
