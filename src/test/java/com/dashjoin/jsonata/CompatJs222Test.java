@@ -649,4 +649,12 @@ public class CompatJs222Test {
         obj.put("b", 1);
         assertEquals(List.of(Jsonata.NULL_VALUE, 1), e.evaluate(Map.of("obj", obj)));
     }
+
+    /** NUM-02: integers beyond 2^53 are stringified from their double value like jsonata-js. */
+    @Test
+    public void num02_largeIntegersToString() {
+        assertEquals("31525197391593470", jsonata("$string(3.5 * 9007199254740993)").evaluate(null));
+        assertEquals("9007199254740992", jsonata("$string(n)").evaluate(Map.of("n", 9007199254740993L)));
+        assertEquals("[12345678901234567000]", jsonata("$string([n])").evaluate(Map.of("n", 12345678901234567890d)));
+    }
 }
