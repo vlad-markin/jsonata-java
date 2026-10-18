@@ -337,4 +337,34 @@ public class CompatJs222Test {
         assertEquals(0.6000000000000001, jsonata("$sum([0.1, 0.2, 0.3])").evaluate(null));
         assertEquals(0.20000000000000004, jsonata("$average([0.1, 0.2, 0.3])").evaluate(null));
     }
+
+    static JException ex(String expr, Object input) {
+        return org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata(expr).evaluate(input));
+    }
+
+    /** ERR-01: runtime errors carry the position of the operator / constructor like jsonata-js. */
+    @Test
+    public void err01_positions() {
+        Map<String, Object> in = Map.of("items", List.of(Map.of("k", 1, "n", "a")));
+        assertEquals(6, ex("items{k: n}", in).getLocation());
+        assertEquals(13, ex("($x := 1; $x())", null).getLocation());
+        assertEquals(6, ex("null + 1", null).getLocation());
+        assertEquals(1, ex("{'x': 1, 'x': 2}", null).getLocation());
+        assertEquals(1, ex("-'a'", null).getLocation());
+        assertEquals(6, ex("[1.5..2]", null).getLocation());
+        assertEquals(6, ex("$sqrt(-1)", null).getLocation());
+    }
+
+    /** ERR-04: error messages are formatted like jsonata-js populateMessage. */
+    @Test
+    public void err04_messages() {
+        assertEquals("Argument 2 of function \"min\" does not match function signature", ex("$min(2, 3)", null).getMessage());
+        assertEquals("The values 1 and \"a\" either side of operator \"<\" must be of the same data type", ex("1 < 'a'", null).getMessage());
+        assertEquals("Argument 1 of function \"average\" must be an array of \"numbers\"", ex("$average(['1','2'])", null).getMessage());
+        assertEquals("Cannot negate a non-numeric value: \"a\"", ex("-'a'", null).getMessage());
+        assertEquals("The left side of the \"+\" operator must evaluate to a number", ex("'a' + 1", null).getMessage());
+        assertEquals("$error() function evaluated", ex("$error()", null).getMessage());
+        assertEquals("$assert() statement failed", ex("$assert(false, '')", null).getMessage());
+        assertEquals("The radix of the formatBase function must be between 2 and 36.  It was given 1", ex("$formatBase(1, 1)", null).getMessage());
+    }
 }

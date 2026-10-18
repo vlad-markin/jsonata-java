@@ -278,6 +278,18 @@ public class Signature implements Serializable {
         return _regex;
     }
 
+    static String arraySignatureMapping(String subtype) {
+        switch (subtype == null ? "" : subtype) {
+            case "a": return "arrays";
+            case "b": return "booleans";
+            case "f": return "functions";
+            case "n": return "numbers";
+            case "o": return "objects";
+            case "s": return "strings";
+            default: return subtype;
+        }
+    }
+
     void throwValidationError(List<?> badArgs, String badSig, String functionName) {
         // to figure out where this went wrong we need apply each component of the
         // regex to each argument until we get to the one that fails to match
@@ -288,7 +300,8 @@ public class Signature implements Serializable {
             partialPattern += _params.get(index).regex;
             Pattern tester = Pattern.compile(partialPattern);
             Matcher match = tester.matcher(badSig);
-            if (match.matches() == false) {
+            // like RegExp.exec without '$': the components so far must match a prefix
+            if (match.lookingAt() == false) {
                 // failed here
                 throw new JException("T0410", -1, (goodTo+1), functionName);
             }
@@ -330,8 +343,8 @@ public class Signature implements Serializable {
                         } else {
                             // context value not compatible with this argument
                             throw new JException("T0411",-1,
-                                context,
-                                argIndex + 1
+                                argIndex + 1,
+                                functionName
                             );
                         }
                     } else {
@@ -375,9 +388,9 @@ public class Signature implements Serializable {
                                 }
                                 if (!arrayOK) {
                                     throw new JException("T0412", -1,
-                                        arg,
-                                        //argIndex + 1,
-                                        param.subtype//arraySignatureMapping[param.subtype]
+                                        argIndex + 1,
+                                        functionName,
+                                        arraySignatureMapping(param.subtype)
                                     );
                                 }
                                 // the function expects an array. If it's not one, make it so

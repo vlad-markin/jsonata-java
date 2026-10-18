@@ -1292,7 +1292,7 @@ public class Functions {
         }
 
         if (radix < 2 || radix > 36) {
-            throw new JException("D3100",
+            throw new JException("D3100", -1,
                 //stack: (new Error()).stack,
                 radix
             );
@@ -1438,7 +1438,7 @@ public class Functions {
 
         if (arg.doubleValue() < 0) {
             throw new JException("D3060",
-                1,
+                -1,
                 arg
             );
         }
@@ -1463,7 +1463,7 @@ public class Functions {
 
         if (!Double.isFinite(result)) {
             throw new JException("D3061",
-                1,
+                -1,
                 arg,
                 exp
             );
@@ -1691,7 +1691,7 @@ public class Functions {
                     hasFoundMatch = true;
                 } else {
                     throw new JException("D3138",
-                        i
+                        -1
                     );
                 }
             }
@@ -1916,7 +1916,7 @@ public class Functions {
      */
     public static void error(String message) throws Throwable {
         throw new JException("D3137", -1,
-            message!=null ? message : "$error() function evaluated");
+            message!=null && !message.isEmpty() ? message : "$error() function evaluated");
     }
 
     /**
@@ -1928,7 +1928,7 @@ public class Functions {
      */
     public static void assertFn(boolean condition, String message) throws Throwable {
         if(!condition) {
-            throw new JException("D3141", -1, message!=null ? message : "$assert() statement failed");
+            throw new JException("D3141", -1, message!=null && !message.isEmpty() ? message : "$assert() statement failed");
 //                message: message || "$assert() statement failed"
         }
     }
@@ -2454,8 +2454,7 @@ public class Functions {
         } catch(Throwable err) {
             // error parsing the expression passed to $eval
             //populateMessage(err);
-            throw new JException("D3120", -1
-            );
+            throw new JException("D3120", -1, err.getMessage());
         }
         Object result = null;
         try {
@@ -2463,8 +2462,7 @@ public class Functions {
         } catch(Throwable err) {
             // error evaluating the expression passed to $eval
             //populateMessage(err);
-            throw new JException("D3121", -1
-            );
+            throw new JException("D3121", -1, err.getMessage());
         }
 
         return result;

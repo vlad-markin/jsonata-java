@@ -42,6 +42,24 @@ public class JException extends RuntimeException {
     public JException(String error, int location, Object currentToken, Object expected) {
         this(null, error, location, currentToken, expected);
     }
+    /**
+     * Error with more than two message arguments (in the order of the placeholders of the
+     * message template, e.g. T2009: value, value2, token)
+     */
+    public JException(String error, int location, Object arg1, Object arg2, Object... more) {
+        super(msg(error, location, concat(arg1, arg2, more), false), null);
+        this.error = error; this.location = location;
+        this.current = arg1;
+        this.expected = arg2;
+    }
+
+    static Object[] concat(Object a, Object b, Object[] more) {
+        Object[] r = new Object[2 + more.length];
+        r[0] = a; r[1] = b;
+        System.arraycopy(more, 0, r, 2, more.length);
+        return r;
+    }
+
     public JException(Throwable cause, String error, int location, Object currentToken, Object expected) {
         super(msg(error, location, currentToken, expected), cause);
         this.error = error; this.location = location;
@@ -120,6 +138,11 @@ public class JException extends RuntimeException {
      * @return
      */
     public static String msg(String error, int location, Object arg1, Object arg2, boolean details) {
+        return msg(error, location, new Object[] { arg1, arg2 }, details);
+    }
+
+    static String msg(String error, int location, Object[] args, boolean details) {
+        Object arg1 = args.length > 0 ? args[0] : null, arg2 = args.length > 1 ? args[1] : null;
         String message = Jsonata.errorCodes.get(error);
 
         if (message==null) {
@@ -128,19 +151,17 @@ public class JException extends RuntimeException {
                 (details ? " {code=unknown position="+location+" arg1="+arg1+" arg2="+arg2+"}" : "");
         }
 
-        String formatted = message;
-        try {
-            if ("{{{message}}}".equals(message))
-                return ""+arg1;
-            // Replace any {{var}} with Java format "%1$s"
-            formatted = formatted.replaceFirst("\\{\\{\\w+\\}\\}", Matcher.quoteReplacement("\"%1$s\""));
-            formatted = formatted.replaceFirst("\\{\\{\\w+\\}\\}", Matcher.quoteReplacement("\"%2$s\""));
-
-            formatted = String.format(formatted, arg1, arg2);
-        } catch (IllegalFormatException ex) {
-            ex.printStackTrace();
-            // ignore
+        // like jsonata-js populateMessage: {{{x}}} is replaced by the raw value, {{x}} by its
+        // JSON representation; the values are taken in order from arg1, arg2
+        Matcher m = PLACEHOLDER.matcher(message);
+        StringBuilder sb = new StringBuilder();
+        int k = 0;
+        while (m.find()) {
+            Object v = k < args.length ? args[k++] : null;
+            m.appendReplacement(sb, Matcher.quoteReplacement(m.group(1) != null ? raw(v) : json(v)));
         }
+        m.appendTail(sb);
+        String formatted = sb.toString();
         if (details) {
             formatted = formatted + " {code="+error;
             if (location>=0)
@@ -148,6 +169,51 @@ public class JException extends RuntimeException {
             formatted += "}";
         }
         return formatted;
+    }
+
+    static final java.util.regex.Pattern PLACEHOLDER = java.util.regex.Pattern.compile("\\{\\{\\{([^}]+)\\}\\}\\}|\\{\\{([^}]+)\\}\\}");
+
+    /** JavaScript String(value) */
+    static String raw(Object v) {
+        if (v == null) return "undefined";
+        if (v == Jsonata.NULL_VALUE) return "null";
+        if (v instanceof Number) return Utils.jsNumberToString(((Number) v).doubleValue());
+        if (v instanceof java.util.Map) return "[object Object]";
+        if (v instanceof List) {
+            StringBuilder b = new StringBuilder();
+            boolean first = true;
+            for (Object o : (List<?>) v) {
+                if (!first) b.append(',');
+                first = false;
+                b.append(o == null || o == Jsonata.NULL_VALUE ? "" : raw(o));
+            }
+            return b.toString();
+        }
+        return String.valueOf(v);
+    }
+
+    /** JavaScript JSON.stringify(value) (undefined renders as "undefined" in a message) */
+    static String json(Object v) {
+        if (v == null) return "undefined";
+        if (v instanceof Number) {
+            double d = ((Number) v).doubleValue();
+            return Double.isFinite(d) ? Utils.jsNumberToString(d) : "null";
+        }
+        if (v instanceof String) {
+            StringBuilder b = new StringBuilder("\"");
+            Utils.quote((String) v, b);
+            return b.append('"').toString();
+        }
+        if (v instanceof Boolean || v == Jsonata.NULL_VALUE) return String.valueOf(v);
+        if (v instanceof java.util.Map || v instanceof List) {
+            try {
+                return Functions.string(v, false);
+            } catch (RuntimeException e) {
+                return String.valueOf(v);
+            }
+        }
+        if (Utils.isFunction(v) || Functions.isLambda(v)) return "undefined";
+        return "\"" + v + "\"";
     }
 
     // Recover

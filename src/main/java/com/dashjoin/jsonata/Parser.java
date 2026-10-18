@@ -389,6 +389,8 @@ public class Parser implements Serializable {
             }
 
             @Override Symbol nud() {
+                // the prefix node replaces this token: keep its position (jsonata-js: expr.position)
+                prefix.position = this.position;
                 return prefix.nud();
                 // expression(70);
                 // type="unary";
@@ -574,18 +576,17 @@ public class Parser implements Serializable {
             // if the name of the function is 'function' or λ, then this is function definition (lambda function)
             if (left.type.equals("name") && (left.value.equals("function") || left.value.equals("\u03BB"))) {
                 // all of the args must be VARIABLE tokens
-                //int index = 0;
+                int index = 0;
                 for (Symbol arg : arguments) {
                 //this.arguments.forEach(function (arg, index) {
                     if (!arg.type.equals("variable")) {
                         return handleError(new JException("S0208",
                             arg.position,
-                            arg.value//,
-                            //index + 1
+                            index + 1
                         )
                         );
                     }
-                    //index++;
+                    index++;
                 }
                 this.type = "lambda";
                 // is the next token a '<' - if so, parse the function signature
@@ -729,14 +730,18 @@ public class Parser implements Serializable {
         // merged register(new Prefix("{") {
 
             @Override Symbol nud() {
-                return objectParser(null);
+                Symbol r = objectParser(null);
+                r.position = this.position;
+                return r;
             }
         // });
 
         // register(new Infix("{", Tokenizer.operators.get("{")) {
 
             @Override Symbol led(Symbol left) {
-                return objectParser(left);
+                Symbol r = objectParser(left);
+                r.position = this.position;
+                return r;
             }
         });
 

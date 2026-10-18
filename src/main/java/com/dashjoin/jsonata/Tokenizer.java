@@ -300,7 +300,7 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
                 // If the number is integral, use long as type
                 return create("number", Utils.convertNumber(num));
             } else {
-                throw new JException("S0102", position); //, match.group[0]);
+                throw new JException("S0102", position, match.group(0));
             }
         }
 
