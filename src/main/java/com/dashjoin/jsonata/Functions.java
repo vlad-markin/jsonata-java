@@ -27,8 +27,6 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -64,6 +62,7 @@ import com.dashjoin.jsonata.Utils.JList;
 import com.dashjoin.jsonata.json.Json;
 import com.dashjoin.jsonata.utils.Constants;
 import com.dashjoin.jsonata.utils.DateTimeUtils;
+import com.dashjoin.jsonata.utils.FormatNumber;
 import com.dashjoin.jsonata.utils.UriCodec;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -1110,164 +1109,7 @@ public class Functions {
      * @returns {String} The formatted string
      */
     public static String formatNumber(Number value, String picture, Map options) {
-        // undefined inputs always return undefined
-        if (value == null) {
-            return null;
-        }
-        
-        if (picture != null) {
-          if (picture.contains(",,"))
-            throw new RuntimeException("The sub-picture must not contain two adjacent instances of the 'grouping-separator' character");
-          if (picture.indexOf('%') >= 0)
-            if (picture.indexOf('e') >= 0)
-                throw new RuntimeException("A sub-picture that contains a 'percent' or 'per-mille' character must not contain a character treated as an 'exponent-separator");
-        }
-        
-        DecimalFormatSymbols symbols = options==null ? new DecimalFormatSymbols(Locale.US) :
-            processOptionsArg(options);
-
-        // Create the formatter and format the number
-        DecimalFormat formatter = new DecimalFormat();
-        formatter.setDecimalFormatSymbols(symbols);
-        String fixedPicture = picture; //picture.replaceAll("9", "0");
-        for (char c='1'; c<='9'; c++)
-            fixedPicture = fixedPicture.replace(c, '0');
-
-        boolean littleE = false;
-        if (fixedPicture.contains("e")) {
-            fixedPicture = fixedPicture.replace("e", "E");
-            littleE = true;
-        }
-        //System.out.println("picture "+fixedPicture);
-        formatter.applyLocalizedPattern(fixedPicture);
-        String result = formatter.format(value);
-
-        if (littleE)
-            result = result.replace("E", "e");
-
-
-        return result;
-    }
-
-    // From JSONata4Java FormatNumberFunction
-    private static DecimalFormatSymbols processOptionsArg(Map argOptions) {
-        // Create the variable return
-        DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.US); // (DecimalFormatSymbols) Constants.DEFAULT_DECIMAL_FORMAT_SYMBOLS.clone();
-
-        // Iterate over the formatting character overrides
-        Iterator<String> fieldNames = argOptions.keySet().iterator();
-        while (fieldNames.hasNext()) {
-            var fieldName = fieldNames.next();
-            var valueNode = (String)argOptions.get(fieldName);
-            // String value = getFormattingCharacter(valueNode);
-            switch (fieldName) {
-                case Constants.SYMBOL_DECIMAL_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_DECIMAL_SEPARATOR, true);
-                    symbols.setDecimalSeparator(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_GROUPING_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_GROUPING_SEPARATOR, true);
-                    symbols.setGroupingSeparator(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_INFINITY: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_INFINITY, false);
-                    symbols.setInfinity(value);
-                    break;
-                }
-
-                case Constants.SYMBOL_MINUS_SIGN: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_MINUS_SIGN, true);
-                    symbols.setMinusSign(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_NAN: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_NAN, false);
-                    symbols.setNaN(value);
-                    break;
-                }
-
-                case Constants.SYMBOL_PERCENT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PERCENT, true);
-                    symbols.setPercent(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_PER_MILLE: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PER_MILLE, false);
-                    symbols.setPerMill(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_ZERO_DIGIT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_ZERO_DIGIT, true);
-                    symbols.setZeroDigit(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_DIGIT: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_DIGIT, true);
-                    symbols.setDigit(value.charAt(0));
-                    break;
-                }
-
-                case Constants.SYMBOL_PATTERN_SEPARATOR: {
-                    String value = getFormattingCharacter(valueNode, Constants.SYMBOL_PATTERN_SEPARATOR, true);
-                    symbols.setPatternSeparator(value.charAt(0));
-                    break;
-                }
-
-                default: {
-                    //final String msg = String.format(Constants.ERR_MSG_INVALID_OPTIONS_UNKNOWN_PROPERTY,
-                    //    Constants.FUNCTION_FORMAT_NUMBER, fieldName);
-                    throw new RuntimeException("Error parsing formatNumber format string");
-                }
-            } // SWITCH
-        } // WHILE
-
-        return symbols;
-    }
-
-    // From JSONata4Java FormatNumberFunction
-    private static String getFormattingCharacter(String value, String propertyName, boolean isChar) {
-        // Create the variable to return
-        String formattingChar = null;
-
-        // Make sure that we have a valid node and that its content is textual
-        //if (valueNode != null && valueNode.isTextual()) {
-            // Read the value
-            //String value = valueNode.textValue();
-            if (value != null && !value.isEmpty()) {
-
-                // If the target property requires a single char, check the length
-                if (isChar) {
-                    if (value.length() == 1) {
-                        formattingChar = value;
-                    } else {
-                        //final String msg = String.format(Constants.ERR_MSG_INVALID_OPTIONS_SINGLE_CHAR,
-                        //    Constants.FUNCTION_FORMAT_NUMBER, propertyName);
-                        throw new RuntimeException();
-                    }
-                } else {
-                    formattingChar = value;
-                }
-            } else {
-                final String msgTemplate;
-                if (isChar) {
-                    msgTemplate = Constants.ERR_MSG_INVALID_OPTIONS_SINGLE_CHAR;
-                } else {
-                    msgTemplate = Constants.ERR_MSG_INVALID_OPTIONS_STRING;
-                }
-                //final String msg = String.format(msgTemplate, Constants.FUNCTION_FORMAT_NUMBER, propertyName);
-                throw new RuntimeException(msgTemplate);
-            }
-        //} 
-        
-        return formattingChar;
+        return FormatNumber.formatNumber(value, picture, options);
     }
 
     /**
@@ -2405,7 +2247,7 @@ public class Functions {
         }
         
         try {
-            DecimalFormat formatter = picture != null ? new DecimalFormat(picture, new DecimalFormatSymbols(Locale.US)) : new DecimalFormat();
+            java.text.DecimalFormat formatter = picture != null ? new java.text.DecimalFormat(picture, new java.text.DecimalFormatSymbols(Locale.US)) : new java.text.DecimalFormat();
             return formatter.parse(value);
         } catch (IllegalArgumentException ill) {
             throw new ParseException("Formatting or parsing an integer as a sequence starting with \""+ picture +"\" is not supported by this implementation", 0);

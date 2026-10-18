@@ -417,4 +417,38 @@ public class CompatJs222Test {
         List<?> r = (List<?>) outer.evaluate(null);
         assertEquals(r.get(0), r.get(2));
     }
+
+    /** NUM-03: $formatNumber is a port of the jsonata-js implementation (picture analysis, rounding, errors). */
+    @Test
+    public void num03_formatNumber() {
+        assertEquals(".1", jsonata("$formatNumber(0.125, '#.#')").evaluate(null));
+        assertEquals("0.00", jsonata("$formatNumber(0.005, '0.00')").evaluate(null));
+        assertEquals("1.00", jsonata("$formatNumber(1.005, '0.00')").evaluate(null));
+        assertEquals("2", jsonata("$formatNumber(2.5, '0')").evaluate(null));
+        assertEquals("0.23e0", jsonata("$formatNumber(0.234, '#.00e0')").evaluate(null));
+        assertEquals("12.3e-05", jsonata("$formatNumber(0.000123, '00.0e00')").evaluate(null));
+        assertEquals("87,504.4812", jsonata("$formatNumber(2392.14*(-36.58), '000,000.000###;###,###.000###')").evaluate(null));
+        assertEquals("12,34,568", jsonata("$formatNumber(1234567.891, '##,##,##0')").evaluate(null));
+        assertEquals(",5,", jsonata("$formatNumber(5, '##,##,##0')").evaluate(null));
+        assertEquals("1,234.5,0", jsonata("$formatNumber(1234.5, '0,000.0,0')").evaluate(null));
+        assertEquals("1e,+22.00", jsonata("$formatNumber(1e22, '#,##0.00')").evaluate(null));
+        assertEquals("-1%", jsonata("$formatNumber(-1, '0%', {'percent': 'pc'})").evaluate(null));
+        assertEquals("-1.234,57", jsonata("$formatNumber(-1234.567, '#.##0,00', {'decimal-separator': ',', 'grouping-separator': '.'})").evaluate(null));
+        assertEquals("\uff11,\uff12\uff13\uff14.\uff15\uff17",
+                jsonata("$formatNumber(1234.567, '#,##\uff10.\uff10\uff10', {'zero-digit': '\uff10'})").evaluate(null));
+        assertEquals("~5.0e~1", jsonata("$formatNumber(-0.5, '0.0e0', {'minus-sign': '~'})").evaluate(null));
+        assertEquals("D3080", err("$formatNumber(1, '0;0;0')"));
+        assertEquals("D3081", err("$formatNumber(1, '0..0')"));
+        assertEquals("D3082", err("$formatNumber(20, '#0%%')"));
+        assertEquals("D3084", err("$formatNumber(1, '0%\u2030')"));
+        assertEquals("D3085", err("$formatNumber(1, '.')"));
+        assertEquals("D3086", err("$formatNumber(42, '---')"));
+        assertEquals("D3087", err("$formatNumber(1, '0.,0')"));
+        assertEquals("D3088", err("$formatNumber(1, '0,')"));
+        assertEquals("D3089", err("$formatNumber(1, '0,,0')"));
+        assertEquals("D3090", err("$formatNumber(1, '0#')"));
+        assertEquals("D3091", err("$formatNumber(1, '0.#0')"));
+        assertEquals("D3092", err("$formatNumber(1, '0e0%')"));
+        assertEquals("D3093", err("$formatNumber(1, '0e#')"));
+    }
 }
