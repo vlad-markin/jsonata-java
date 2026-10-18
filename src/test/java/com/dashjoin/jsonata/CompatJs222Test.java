@@ -543,8 +543,8 @@ public class CompatJs222Test {
         assertEquals(1527001440000L, jsonata("$toMillis('2018-05-22 03:04 pm', '[Y]-[M]-[D] [h]:[m] [P]')").evaluate(null));
         assertEquals(1526428800000L, jsonata("$toMillis('2018-136', '[Y]-[d]')").evaluate(null));
         assertEquals(1526963400000L, jsonata("$toMillis('2018-05-22T10:00:00+05:30', '[Y]-[M]-[D]T[H]:[m]:[s][Z]')").evaluate(null));
-        // agreed exception (DT-05): the minutes of a negative offset are negative (jsonata-js: 1526985000000)
-        assertEquals(1526988600000L, jsonata("$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')").evaluate(null));
+        // like jsonata-js 2.2.2 (DT-06): '-0130' is read as -00:30 (the offset comes from data, kept equivalent)
+        assertEquals(1526985000000L, jsonata("$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')").evaluate(null));
         // out of range components roll over like Date.UTC
         assertEquals(1548892800000L, jsonata("$toMillis('2018-13-31', '[Y]-[M]-[D]')").evaluate(null));
         assertEquals(1514764800000L, jsonata("$toMillis('2018', '[Y,2-]')").evaluate(null));

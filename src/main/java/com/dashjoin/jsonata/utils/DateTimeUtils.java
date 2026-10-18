@@ -1073,9 +1073,9 @@ public class DateTimeUtils implements Serializable {
                             offsetMinutes = jsParseInt(value.substring(3));
                         }
                     }
-                    // unlike jsonata-js, the minutes of a negative offset are negative as well (-05:30 = -330)
-                    if (value.startsWith("-"))
-                        offsetMinutes = -offsetMinutes;
+                    // same as jsonata-js 2.2.2: the minutes are added even for a negative offset
+                    // (-05:30 is read as -04:30, see DT-06 in compat-eval/divergences.md); kept for
+                    // equivalence because the offset usually comes from data and cannot be rewritten
                     return offsetHours * 60 + offsetMinutes;
                 });
             } else if (part.component == 'f') {
