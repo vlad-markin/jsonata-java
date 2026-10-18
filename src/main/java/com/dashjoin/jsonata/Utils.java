@@ -64,6 +64,71 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Deep equality as in jsonata-js utils.isDeepEqual: numbers are compared by value regardless of
+     * their Java type (Integer, Long, Double...), arrays element-wise, objects by key set and values.
+     */
+    public static boolean isDeepEqual(Object lhs, Object rhs) {
+        if (lhs == rhs)
+            return true;
+        if (lhs == null || rhs == null)
+            return false;
+        if (lhs == Jsonata.NULL_VALUE || rhs == Jsonata.NULL_VALUE)
+            return false;
+        if (lhs instanceof Number && rhs instanceof Number)
+            return ((Number) lhs).doubleValue() == ((Number) rhs).doubleValue();
+        if (lhs instanceof List && rhs instanceof List) {
+            List<?> l = (List<?>) lhs, r = (List<?>) rhs;
+            if (l.size() != r.size())
+                return false;
+            for (int i = 0; i < l.size(); i++)
+                if (!isDeepEqual(nullValue(l.get(i)), nullValue(r.get(i))))
+                    return false;
+            return true;
+        }
+        if (lhs instanceof Map && rhs instanceof Map) {
+            Map<?, ?> l = (Map<?, ?>) lhs, r = (Map<?, ?>) rhs;
+            if (l.size() != r.size() || !l.keySet().equals(r.keySet()))
+                return false;
+            for (Map.Entry<?, ?> e : l.entrySet())
+                if (!isDeepEqual(nullValue(e.getValue()), nullValue(r.get(e.getKey()))))
+                    return false;
+            return true;
+        }
+        return lhs.equals(rhs);
+    }
+
+    /**
+     * Returns a key whose equals/hashCode is consistent with {@link #isDeepEqual(Object, Object)}
+     * (numbers normalized to Double, -0.0 to 0.0, Java null to NULL_VALUE).
+     */
+    public static Object deepEqualKey(Object o) {
+        if (o == null)
+            return Jsonata.NULL_VALUE;
+        if (o instanceof Number) {
+            double d = ((Number) o).doubleValue();
+            return d == 0 ? 0.0d : d;
+        }
+        if (o instanceof List) {
+            List<Object> l = new ArrayList<>(((List<?>) o).size());
+            for (Object x : (List<?>) o)
+                l.add(deepEqualKey(x));
+            return l;
+        }
+        if (o instanceof Map) {
+            Map<Object, Object> m = new java.util.HashMap<>();
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) o).entrySet())
+                m.put(e.getKey(), deepEqualKey(e.getValue()));
+            return m;
+        }
+        return o;
+    }
+
+    /** Java null inside input structures represents JSON null */
+    private static Object nullValue(Object o) {
+        return o == null ? Jsonata.NULL_VALUE : o;
+    }
+
     public static boolean isFunction(Object o) {
         return o instanceof JFunction || o instanceof JFunctionCallable;
     }

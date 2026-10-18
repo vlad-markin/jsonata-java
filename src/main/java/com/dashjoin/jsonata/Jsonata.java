@@ -916,20 +916,14 @@ public class Jsonata {
             return false;
         }
 
-        // JSON might come with integers,
-        // convert all to double...
-        // FIXME: semantically OK?
-        if (lhs instanceof Number)
-            lhs = ((Number)lhs).doubleValue();
-        if (rhs instanceof Number)
-            rhs = ((Number)rhs).doubleValue();
-
+        // numbers of any Java type (Integer, Long, Double) are compared by value, also inside
+        // arrays and objects (jsonata-js isDeepEqual)
         switch (op) {
             case "=":
-                result = lhs.equals(rhs); // isDeepEqual(lhs, rhs);
+                result = Utils.isDeepEqual(lhs, rhs);
                 break;
             case "!=":
-                result = !lhs.equals(rhs); // !isDeepEqual(lhs, rhs);
+                result = !Utils.isDeepEqual(lhs, rhs);
                 break;
         }
         return result;
@@ -1024,8 +1018,17 @@ public class Jsonata {
         }
 
         for(var i = 0; i < ((List)rhs).size(); i++) {
-            Object tmp = evaluateEqualityExpression(lhs, ((List)rhs).get(i), "=");
-            if (Boolean.TRUE.equals(tmp)) {
+            // jsonata-js uses strict equality (===): numbers and strings by value,
+            // arrays and objects by identity
+            Object item = ((List)rhs).get(i);
+            boolean same;
+            if (lhs instanceof Number && item instanceof Number)
+                same = ((Number)lhs).doubleValue() == ((Number)item).doubleValue();
+            else if (lhs instanceof Map || lhs instanceof List)
+                same = lhs == item;
+            else
+                same = lhs.equals(item);
+            if (same) {
                 result = true;
                 break;
             }

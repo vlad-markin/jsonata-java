@@ -44,6 +44,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -2034,11 +2035,13 @@ public class Functions {
 
         var results = (arr instanceof JList/*sequence*/) ? createSequence() : new ArrayList<>();
 
-        // Create distinct list of elements by adding all to a set,
-        // and then adding the set to the result
-        var set = new LinkedHashSet(arr.size());
-        set.addAll(arr);
-        results.addAll(set);
+        // keep the first occurrence of deep-equal values (jsonata-js deepEquals: numbers are
+        // compared by value regardless of Java type); normalized keys keep this O(n)
+        var seen = new HashSet<Object>();
+        for (Object value : arr) {
+            if (seen.add(Utils.deepEqualKey(value)))
+                results.add(value);
+        }
 
         return results;
     }

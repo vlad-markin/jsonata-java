@@ -48,4 +48,31 @@ public class CompatJs222Test {
             ex.shutdown();
         }
     }
+
+    /** NUM-01: deep equality compares numbers by value regardless of the Java type. */
+    @Test
+    public void num01_deepEqualityIgnoresNumberType() {
+        Map<String, Object> in = new LinkedHashMap<>();
+        in.put("a", List.of(1L, 2L));
+        in.put("d", List.of(1.0, 2.0));
+        in.put("o", Map.of("x", 1L));
+        assertEquals(true, jsonata("a = [1, 2]").evaluate(in));
+        assertEquals(true, jsonata("d = [1, 2]").evaluate(in));
+        assertEquals(false, jsonata("a != [1, 2]").evaluate(in));
+        assertEquals(true, jsonata("o = {'x': 1.0}").evaluate(in));
+        assertEquals(false, jsonata("o = {'x': 2}").evaluate(in));
+        assertEquals(true, jsonata("[1, {'a': [null]}] = [1.0, {'a': [null]}]").evaluate(null));
+        assertEquals(List.of(1L, 2L), jsonata("$distinct([a, 1, 2.0, a[0]])").evaluate(in));
+    }
+
+    /** NUM-01: "in" uses strict equality like jsonata-js: numbers by value, objects/arrays by identity. */
+    @Test
+    public void num01_inOperatorStrictEquality() {
+        Map<String, Object> in = new LinkedHashMap<>();
+        in.put("n", 3L);
+        assertEquals(true, jsonata("n in [1, 2, 3.0]").evaluate(in));
+        assertEquals(false, jsonata("[1] in [[1]]").evaluate(null));
+        assertEquals(false, jsonata("{'a':1} in [{'a':1}]").evaluate(null));
+        assertEquals(true, jsonata("($o := {'a':1}; $o in [$o])").evaluate(null));
+    }
 }
