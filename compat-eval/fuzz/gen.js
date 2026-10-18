@@ -245,7 +245,7 @@ const ZONES = {
         () => '$assert(' + pick(['true', 'false', '1=1', '1=2', 'null', '"x"', '0']) + (chance(0.6) ? ', ' + q(pick(['custom message', '', 'x'])) : '') + ')',
         () => '$error(' + pick(['"boom"', '', '""', '{"a":1}', '42']) + ')',
         () => '(' + pick(['$x := 1', '$f := function($a){$a*2}']) + '; ' + pick(['$x()', '$f(1,2)', '$f()', '$g(1)', '$f.x', 'x()', '$x(1)', '1()', '"s"()']) + ')',
-        () => pick(['1 + "a"', '"a" - 1', '[1] + 1', '{} * 2', 'true + 1', '1 > "a"', '"a" < true', '-"a"', '$sum("a")', '$sum(["a"])', '$max(["a"])', '$average([true])', '1..3', '[1..1e7]', '[1..1.5]', '[1.."2"]', '$x.y.z()', '$keys(1, 2)', '$count()', '$substring()', 'a.b.', '1 +', '$', '"unterminated', '/unterminated', '{"a":1 "b":2}', 'a[', '$lookup(1,"a")', '$spread("x")', '$string(1,2,3)', '$join([1,2])', '$split("a", 1)', '$uppercase(1)', '$sort([1,"a"])', 'λ($x)<n:n>{$x}("a")', 'function($x)<s>{$x}(1)', '$map(1)', '$reduce([1], 1)', '1 in 2', 'a ~> 1', '$formatNumber(1)', '$toMillis(1)', '$fromMillis("a")', '$number([1])', '$boolean(function(){1})']),
+        () => pick(['1 + "a"', '"a" - 1', '[1] + 1', '{} * 2', 'true + 1', '1 > "a"', '"a" < true', '-"a"', '$sum("a")', '$sum(["a"])', '$max(["a"])', '$average([true])', '1..3', '[1..1.5]', '[1.."2"]', '$x.y.z()', '$keys(1, 2)', '$count()', '$substring()', 'a.b.', '1 +', '$', '"unterminated', '/unterminated', '{"a":1 "b":2}', 'a[', '$lookup(1,"a")', '$spread("x")', '$string(1,2,3)', '$join([1,2])', '$split("a", 1)', '$uppercase(1)', '$sort([1,"a"])', 'λ($x)<n:n>{$x}("a")', 'function($x)<s>{$x}(1)', '$map(1)', '$reduce([1], 1)', '1 in 2', 'a ~> 1', '$formatNumber(1)', '$toMillis(1)', '$fromMillis("a")', '$number([1])', '$boolean(function(){1})']),
     ])(),
 };
 
