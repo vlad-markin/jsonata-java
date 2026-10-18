@@ -1,0 +1,143 @@
+--- a/com/dashjoin/jsonata/Jsonata.java	2026-10-18 00:58:38.680908991 +0000
++++ b/com/dashjoin/jsonata/Jsonata.java	2026-10-18 03:27:36.133220537 +0000
+@@ -128,6 +128,8 @@
+ 
+         public long time;
+ 
++        Object entryCb, exitCb; // PATCH B
++
+         public List<Object> createSequence() { return createSequence(Utils.NONE); }
+ 
+         public List<Object> createSequence(Object el) {
+@@ -184,7 +186,7 @@
+ 
+         environment.base.depth++;
+         environment.base.guardrails();
+-        var entryCallback = environment.lookup("__evaluate_entry");
++        var entryCallback = environment.base.entryCb; // PATCH B
+         if(entryCallback!=null) {
+             ((EntryCallback)entryCallback).callback(expr, input, environment);
+         }
+@@ -259,7 +261,7 @@
+             result = /* await */ evaluateGroupExpression(expr.group, result, environment);
+         }
+  
+-        var exitCallback = environment.lookup("__evaluate_exit");
++        var exitCallback = environment.base.exitCb; // PATCH B
+         if(exitCallback!=null) {
+             ((ExitCallback)exitCallback).callback(expr, input, environment, result);
+         }
+@@ -601,7 +603,7 @@
+     Infix expr = (Infix)_expr;
+         Object result = null;
+         var lhs = /* await */ evaluate(expr.lhs, input, environment);
+-        String op = ""+expr.value;
++        String op = expr.value instanceof String ? (String)expr.value : opString(expr.value); // PATCH C
+ 
+         if (op.equals("and") || op.equals("or")) {
+ 
+@@ -904,14 +906,15 @@
+       * @param {Object} op - opcode
+       * @returns {*} Result
+       */
++    static final String[] OPS = new String[128];
++    static { for (char c = 0; c < 128; c++) OPS[c] = String.valueOf(c); }
++    static String opString(Object v) { return v instanceof Character && (Character)v < 128 ? OPS[(Character)v] : ""+v; }
++
+     Object evaluateEqualityExpression(Object lhs, Object rhs, String op) {
+         Object result = null;
+ 
+         // type checks
+-        var ltype = lhs!=null ? lhs.getClass().getSimpleName() : null;
+-        var rtype = rhs!=null ? rhs.getClass().getSimpleName() : null;
+-
+-        if (ltype == null || rtype == null) {
++        if (lhs == null || rhs == null) { // PATCH C: was getClass().getSimpleName() just for a null check
+             // if either side is undefined, the result is false
+             return false;
+         }
+@@ -1087,6 +1090,7 @@
+     static class GroupEntry {
+         Object data;
+         int exprIndex;
++        boolean owned; // PATCH: data is a private accumulator list
+     }
+      
+     /**
+@@ -1142,7 +1146,10 @@
+                         }
+ 
+                         // append it as an array
+-                        groups.get(key).data = Functions.append(groups.get(key).data, item);
++                        GroupEntry g = groups.get(key);
++                        if (!g.owned) { g.data = Functions.append(g.data, item); g.owned = true; }
++                        else if (item instanceof List) ((List)g.data).addAll((List)item);
++                        else ((List)g.data).add(item);
+                     } else {
+                         groups.put(key, entry);
+                     }
+@@ -2714,6 +2721,8 @@
+         // Porting JS to Java note: guardrails function is in Java class Frame
+         exec_env.base = exec_env;
+         exec_env.depth = 0;
++        exec_env.entryCb = exec_env.lookup("__evaluate_entry"); // PATCH B
++        exec_env.exitCb = exec_env.lookup("__evaluate_exit");
+ 
+         if (validateInput)
+             Functions.validateInput(input);
+--- a/com/dashjoin/jsonata/utils/Signature.java	2026-10-18 00:58:38.685020841 +0000
++++ b/com/dashjoin/jsonata/utils/Signature.java	2026-10-18 03:27:36.132302304 +0000
+@@ -301,9 +301,10 @@
+         var result = new ArrayList<>();
+ 
+         var args = (List)_args;
+-        String suppliedSig = "";
++        StringBuilder _sb = new StringBuilder(); // PATCH C
+         for (Object arg : args)
+-            suppliedSig += getSymbol(arg);
++            _sb.append(getSymbol(arg));
++        String suppliedSig = _sb.toString();
+         
+         Matcher isValid = _regex.matcher(suppliedSig);
+         if (isValid != null && isValid.matches()) {
+@@ -320,7 +321,7 @@
+                         // first check that the context value is the right type
+                         var contextType = getSymbol(context);
+                         // test contextType against the regex for this arg (without the trailing ?)
+-                        if (Pattern.matches(param.regex, contextType)) {
++                        if (cachedPattern(param.regex).matcher(contextType).matches()) { // PATCH C
+                         //if (param.contextRegex.test(contextType)) {
+                             validatedArgs.add(context);
+                         } else {
+@@ -337,7 +338,7 @@
+                 } else {
+                     // may have matched multiple args (if the regex ends with a '+'
+                     // split into single tokens
+-                    String[] singles = match.split("");
++                    String[] singles = splitChars(match); // PATCH C: was match.split("") (compiles a Pattern per call)
+                     for (String single : singles) {
+                     //match.split('').forEach(function (single) {
+                         if (param.type.equals("a")) {
+@@ -453,7 +454,7 @@
+                 } else {
+                     // may have matched multiple args (if the regex ends with a '+'
+                     // split into single tokens
+-                    String[] singles = match.split("");
++                    String[] singles = splitChars(match); // PATCH C: was match.split("") (compiles a Pattern per call)
+                     for (String single : singles) {
+                         if ("a".equals(param.get("type").asText())) {
+                             if ("m".equals(single)) {
+@@ -521,4 +522,13 @@
+         return result;
+     };
+ */
++
++    // PATCH C helpers
++    static String[] splitChars(String m) {
++        String[] r = new String[m.length()];
++        for (int i = 0; i < r.length; i++) r[i] = String.valueOf(m.charAt(i));
++        return r;
++    }
++    static final java.util.concurrent.ConcurrentHashMap<String, Pattern> PCACHE = new java.util.concurrent.ConcurrentHashMap<>();
++    static Pattern cachedPattern(String re) { return PCACHE.computeIfAbsent(re, Pattern::compile); }
+ }

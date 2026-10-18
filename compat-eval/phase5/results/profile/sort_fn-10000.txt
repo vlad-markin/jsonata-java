@@ -1,0 +1,90 @@
+## CPU samples: 1436
+
+### top self frames
+
+ 25.1%  java/util/HashMap.getNode
+ 23.5%  java/util/Arrays.copyOf
+ 19.2%  com/dashjoin/jsonata/Jsonata.evaluateStep
+  4.7%  com/dashjoin/jsonata/Jsonata.evaluate
+  4.0%  java/lang/String.valueOf
+  3.7%  com/dashjoin/jsonata/Jsonata._evaluate
+  3.4%  com/dashjoin/jsonata/Jsonata.evaluatePath
+  3.0%  java/lang/String.equals
+  2.8%  java/lang/StringConcatHelper.newStringOf
+  1.4%  java/util/HashMap.resize
+  1.1%  com/dashjoin/jsonata/Jsonata.apply
+  1.0%  java/util/LinkedHashMap.newNode
+  0.8%  com/dashjoin/jsonata/Jsonata$Frame.bind
+  0.8%  com/dashjoin/jsonata/Jsonata$Frame.lookup
+  0.8%  com/dashjoin/jsonata/Utils.__createSequence
+  0.7%  com/dashjoin/jsonata/Functions.toBoolean
+  0.6%  java/util/HashMap.putVal
+  0.6%  com/dashjoin/jsonata/Jsonata.evaluateBinary
+  0.4%  com/dashjoin/jsonata/Jsonata$Frame.guardrails
+  0.3%  java/util/ArrayList.grow
+  0.2%  java/util/TimSort.sort
+  0.2%  com/dashjoin/jsonata/Functions.validateInput
+  0.2%  com/dashjoin/jsonata/Jsonata.applyProcedure
+  0.2%  com/dashjoin/jsonata/Jsonata.evaluateComparisonExpression
+  0.1%  java/util/TimSort.mergeHi
+
+### top inclusive frames
+
+100.0%  com/dashjoin/jsonata/Jsonata.evaluate
+100.0%  compat/bench/Bench.main
+ 99.8%  com/dashjoin/jsonata/Jsonata.evaluatePath
+ 99.8%  com/dashjoin/jsonata/Jsonata.evaluateStep
+ 99.8%  com/dashjoin/jsonata/Jsonata._evaluate
+ 99.0%  java/lang/reflect/Method.invoke
+ 99.0%  jdk/internal/reflect/DirectMethodHandleAccessor.invokeImpl
+ 99.0%  com/dashjoin/jsonata/Functions.sort
+ 99.0%  LambdaForm$MH/0x00007f5f0808d400.invoke
+ 99.0%  java/lang/invoke/DirectMethodHandle$Holder.invokeStatic
+ 99.0%  com/dashjoin/jsonata/Jsonata$JFunction.call
+ 99.0%  LambdaForm$MH/0x00007f5f0808d800.invokeExact_MT
+ 99.0%  com/dashjoin/jsonata/Jsonata.apply
+ 99.0%  com/dashjoin/jsonata/Functions.call
+ 99.0%  com/dashjoin/jsonata/Jsonata.applyInner
+ 99.0%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+ 99.0%  jdk/internal/reflect/DirectMethodHandleAccessor.invoke
+ 99.0%  java/util/TimSort.sort
+ 99.0%  java/util/Arrays.sort
+ 99.0%  java/util/ArrayList.sort
+ 98.4%  com/dashjoin/jsonata/Functions$1.compare
+ 98.4%  com/dashjoin/jsonata/Functions.funcApply
+ 97.1%  com/dashjoin/jsonata/Jsonata.applyProcedure
+ 88.4%  com/dashjoin/jsonata/Jsonata.evaluateCondition
+ 85.5%  com/dashjoin/jsonata/Jsonata.evaluateBinary
+
+### top allocated types (sampled weight, total 18471 MB)
+
+ 51.5%  [Ljava/lang/Object;
+ 26.9%  com/dashjoin/jsonata/Utils$JList
+  9.5%  java/lang/String
+  3.5%  java/util/LinkedHashMap$Entry
+  2.6%  [Ljava/util/HashMap$Node;
+  2.5%  java/util/LinkedHashMap
+  1.7%  [B
+  1.0%  com/dashjoin/jsonata/Jsonata$Frame
+  0.6%  java/util/Arrays$ArrayList
+  0.0%  java/util/ArrayList$Itr
+  0.0%  java/util/LinkedHashMap$LinkedEntryIterator
+  0.0%  java/lang/Double
+
+### top allocation sites (first non-JDK-collection frame)
+
+ 51.2%  java/util/ArrayList.grow
+ 26.9%  com/dashjoin/jsonata/Utils.__createSequence
+  6.1%  java/lang/StringConcatHelper.newStringOf
+  3.5%  java/util/LinkedHashMap.newNode
+  3.4%  java/lang/String.valueOf
+  2.6%  java/util/HashMap.resize
+  2.5%  com/dashjoin/jsonata/Jsonata$Frame.<init>
+  1.7%  java/lang/StringLatin1.toBytes
+  1.0%  com/dashjoin/jsonata/Jsonata.createFrame
+  0.6%  java/util/Arrays.asList
+  0.4%  com/dashjoin/jsonata/Functions$1.compare
+  0.0%  java/util/ArrayList.iterator
+  0.0%  java/util/LinkedHashMap$LinkedEntrySet.iterator
+  0.0%  java/lang/Double.valueOf
+  0.0%  java/util/Arrays.copyOf

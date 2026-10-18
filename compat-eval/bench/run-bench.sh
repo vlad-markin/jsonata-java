@@ -36,13 +36,13 @@ for n in $SIZES; do
 done
 node compare.js "$OUT/dump" | tee "$OUT/equality.tsv" || echo "WARNING: result mismatch, see equality.tsv"
 
-# overhead of frame / callbacks / setRuntimeBounds / Options guardrails / input validation (JVM, 50k)
+# overhead of frame / callbacks / setRuntimeBounds / Options guardrails / input validation (JVM, 10k),
+# interleaved per round so that background load affects all modes alike
 if [ -z "${SKIP_MODES:-}" ]; then
-  Q=path_filter,group_nested,map_filter_reduce,strings,recursion_tree,tail_loop
-  for m in plain frame novalidate callbacks bounds guardrails; do
-    $JAVA compat.bench.Bench --queries queries.json --data data/model-50000.json --size 50000 \
-         --warmup 5 --iters 10 --budget-ms "$BUDGET_MS" --only "$Q" --mode "$m" --out "$OUT/jvm-modes.jsonl" 2>&1 | grep -v JAVA_TOOL
-  done
+  rm -f "$OUT/jvm-modes-interleaved.jsonl"
+  $JAVA compat.bench.ModesBench --queries queries.json --data data/model-10000.json \
+       --only path_filter,group_nested,map_filter_reduce,strings,join_scan,recursion_tree,tail_loop \
+       --rounds 15 --warmup 5 --out "$OUT/jvm-modes-interleaved.jsonl" 2>&1 | grep -v JAVA_TOOL
 fi
 rm -rf "$OUT/dump"   # large; equality.tsv keeps the verdict
 node report.js "$OUT" > "$OUT/summary.md"

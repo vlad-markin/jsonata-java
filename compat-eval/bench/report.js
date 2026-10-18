@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const dir = process.argv[2];
 const load = (f) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []);
-const js = load('js.jsonl'), jvm = load('jvm.jsonl'), modes = load('jvm-modes.jsonl');
+const js = load('js.jsonl'), jvm = load('jvm.jsonl'), modes = load('jvm-modes-interleaved.jsonl');
 const f = (x, d = 1) => (x == null ? '—' : x >= 100 ? x.toFixed(0) : x.toFixed(d));
 const key = (r) => r.query + '@' + r.size;
 const jvmBy = Object.fromEntries(jvm.map((r) => [key(r), r]));
@@ -40,25 +40,17 @@ for (const a of js.filter((r) => r.size === Math.min(...js.map((x) => x.size))))
   out.push(`| ${a.query} | ${f(a.compile_ms_median, 3)} | ${f(b.compile_ms_median, 3)} |`);
 }
 if (modes.length) {
+  const MODES = ['plain', 'frame', 'novalidate', 'callbacks', 'bounds', 'guardrails'];
   out.push('');
-  out.push('### JVM overhead of evaluation-control features (N=50k), median ms (Δ vs plain)');
+  out.push('### JVM overhead of evaluation-control features (N=10k, interleaved rounds), median ms (median per-round ratio vs plain)');
   out.push('');
-  const ms = [...new Set(modes.map((r) => r.mode))];
-  const qs = [...new Set(modes.map((r) => r.query))];
-  out.push('| query | ' + ms.join(' | ') + ' |');
-  out.push('|---|' + ms.map(() => '---:').join('|') + '|');
-  for (const q of qs) {
-    const base = modes.find((r) => r.query === q && r.mode === 'plain');
-    out.push(`| ${q} | ` + ms.map((m) => {
-      const r = modes.find((x) => x.query === q && x.mode === m);
-      if (!r) return '—';
-      if (r.error) return 'ERR: ' + r.error.slice(0, 40);
-      if (m === 'plain' || !base) return f(r.eval_ms_median);
-      return `${f(r.eval_ms_median)} (${((r.eval_ms_median / base.eval_ms_median - 1) * 100).toFixed(0)}%)`;
-    }).join(' | ') + ' |');
+  out.push('| query | ' + MODES.join(' | ') + ' |');
+  out.push('|---|' + MODES.map(() => '---:').join('|') + '|');
+  const mcsv = ['query,mode,median_ms,min_ms,ratio_vs_plain_median'];
+  for (const r of modes) {
+    out.push(`| ${r.query} | ` + MODES.map((m) => m === 'plain' ? f(r[m].median_ms) : `${f(r[m].median_ms)} (×${r[m].ratio_vs_plain_median.toFixed(2)})`).join(' | ') + ' |');
+    for (const m of MODES) mcsv.push([r.query, m, r[m].median_ms, r[m].min_ms, r[m].ratio_vs_plain_median].join(','));
   }
-  const mcsv = ['mode,query,size,median_ms,p95_ms,alloc_mb,error'];
-  for (const r of modes) mcsv.push([r.mode, r.query, r.size, r.eval_ms_median, r.eval_ms_p95, r.alloc_mb_median, JSON.stringify(r.error || '')].join(','));
   fs.writeFileSync(path.join(dir, 'modes.csv'), mcsv.join('\n') + '\n');
 }
 fs.writeFileSync(path.join(dir, 'results.csv'), csv.join('\n') + '\n');

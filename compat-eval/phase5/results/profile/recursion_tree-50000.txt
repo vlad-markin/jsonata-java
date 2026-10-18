@@ -1,0 +1,113 @@
+## CPU samples: 2855
+
+### top self frames
+
+ 16.8%  java/util/regex/Matcher.getTextLength
+ 12.2%  java/util/regex/Pattern.compile
+  8.1%  java/util/HashMap.getNode
+  5.6%  com/dashjoin/jsonata/Jsonata.evaluate
+  5.5%  java/util/regex/Pattern$Node.study
+  4.8%  java/lang/String.hashCode
+  4.3%  java/lang/invoke/Invokers$Holder.invokeExact_MT
+  4.1%  com/dashjoin/jsonata/utils/Signature.validate
+  3.8%  com/dashjoin/jsonata/Jsonata.evaluateLambda
+  3.6%  java/util/Arrays.copyOf
+  2.6%  java/util/HashMap.resize
+  2.5%  com/dashjoin/jsonata/Jsonata._evaluate
+  2.5%  java/util/regex/Pattern.split
+  2.4%  java/util/regex/Pattern$Start.<init>
+  2.1%  java/lang/String.valueOf
+  1.7%  java/lang/Long.equals
+  1.7%  com/dashjoin/jsonata/Jsonata.apply
+  1.5%  java/util/regex/Matcher.find
+  1.5%  java/lang/Class.reflectionData
+  1.4%  java/util/regex/Pattern$BmpCharProperty.match
+  1.3%  com/dashjoin/jsonata/Jsonata.applyProcedure
+  1.3%  com/dashjoin/jsonata/Functions.funcApply
+  1.2%  com/dashjoin/jsonata/Functions.validateInput
+  1.1%  java/util/regex/Pattern.matcher
+  1.0%  java/lang/StringConcatHelper.simpleConcat
+
+### top inclusive frames
+
+100.0%  com/dashjoin/jsonata/Jsonata.evaluate
+ 98.7%  com/dashjoin/jsonata/Jsonata.evaluateBinary
+ 98.7%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+ 98.7%  com/dashjoin/jsonata/Jsonata.evaluateCondition
+ 98.7%  LambdaForm$MH/0x00007fb22008dc00.invokeExact_MT
+ 98.7%  com/dashjoin/jsonata/Jsonata.applyInner
+ 98.7%  java/lang/reflect/Method.invoke
+ 98.7%  jdk/internal/reflect/DirectMethodHandleAccessor.invokeImpl
+ 98.7%  com/dashjoin/jsonata/Jsonata.applyProcedure
+ 98.7%  com/dashjoin/jsonata/Jsonata.apply
+ 98.7%  com/dashjoin/jsonata/Jsonata$JFunction.call
+ 98.7%  com/dashjoin/jsonata/Functions.each
+ 98.7%  jdk/internal/reflect/DirectMethodHandleAccessor.invoke
+ 98.7%  java/lang/invoke/DirectMethodHandle$Holder.invokeStatic
+ 98.7%  com/dashjoin/jsonata/Functions.funcApply
+ 98.7%  com/dashjoin/jsonata/Jsonata._evaluate
+ 98.7%  com/dashjoin/jsonata/Functions.call
+ 98.7%  LambdaForm$MH/0x00007fb22008f400.invoke
+ 86.7%  com/dashjoin/jsonata/Functions.map
+ 86.1%  LambdaForm$MH/0x00007fb22008f800.invoke
+ 49.7%  com/dashjoin/jsonata/utils/Signature.validate
+ 49.7%  com/dashjoin/jsonata/Jsonata$JFunction.validate
+ 49.7%  com/dashjoin/jsonata/Jsonata.validateArguments
+ 35.3%  java/lang/String.split
+ 32.5%  java/util/regex/Pattern.matcher
+
+### top allocated types (sampled weight, total 29999 MB)
+
+ 21.7%  [I
+ 14.8%  [Ljava/lang/Object;
+  7.6%  java/util/regex/Matcher
+  7.3%  com/dashjoin/jsonata/Parser$Symbol
+  5.7%  java/util/ArrayList
+  4.6%  java/util/regex/Pattern$TreeInfo
+  4.4%  [Ljava/util/regex/Pattern$GroupHead;
+  4.3%  java/lang/String
+  3.9%  java/util/regex/Pattern
+  3.6%  java/util/LinkedHashMap$Entry
+  3.4%  java/util/LinkedHashMap
+  3.0%  [Ljava/util/HashMap$Node;
+  3.0%  [Ljava/lang/Class;
+  2.9%  com/dashjoin/jsonata/Jsonata$Frame
+  2.2%  [Ljava/lang/String;
+  2.0%  java/util/regex/Pattern$Start
+  1.6%  [Ljava/util/regex/IntHashSet;
+  1.4%  java/lang/Double
+  0.9%  [B
+  0.8%  java/util/ArrayList$Itr
+  0.2%  java/util/stream/ReferencePipeline$Head
+  0.2%  [D
+  0.2%  java/util/stream/ReferencePipeline$6
+  0.1%  java/util/ArrayList$ArrayListSpliterator
+  0.1%  java/util/stream/ReferencePipeline$6$1
+
+### top allocation sites (first non-JDK-collection frame)
+
+ 18.4%  java/util/regex/Pattern.compile
+ 15.1%  java/util/regex/Matcher.<init>
+ 10.4%  java/util/ArrayList.grow
+  7.6%  java/util/regex/Pattern.matcher
+  7.3%  com/dashjoin/jsonata/Jsonata.evaluateLambda
+  4.6%  java/util/regex/Pattern$Start.<init>
+  3.6%  java/util/LinkedHashMap.newNode
+  3.4%  com/dashjoin/jsonata/Jsonata$Frame.<init>
+  3.0%  java/util/HashMap.resize
+  3.0%  java/lang/reflect/Method.getParameterTypes
+  2.9%  com/dashjoin/jsonata/Jsonata.createFrame
+  2.2%  java/util/regex/Pattern.split
+  2.2%  java/util/Arrays.copyOf
+  2.2%  java/util/ArrayList.<init>
+  1.9%  java/lang/StringConcatHelper.newStringOf
+  1.8%  com/dashjoin/jsonata/Functions.call
+  1.4%  java/lang/Double.valueOf
+  1.4%  java/lang/StringConcatHelper.simpleConcat
+  1.3%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+  1.2%  com/dashjoin/jsonata/utils/Signature.validate
+  0.8%  java/lang/String.valueOf
+  0.8%  java/util/regex/Pattern.<init>
+  0.8%  java/util/ArrayList.iterator
+  0.6%  java/lang/StringLatin1.toBytes
+  0.3%  com/dashjoin/jsonata/Functions.hofFuncArgs

@@ -1,0 +1,113 @@
+## CPU samples: 1201
+
+### top self frames
+
+ 39.0%  com/dashjoin/jsonata/Functions.validateInput
+ 23.6%  java/util/HashMap.getNode
+  9.1%  java/lang/String.hashCode
+  6.0%  com/dashjoin/jsonata/Jsonata.evaluatePath
+  4.2%  java/util/Arrays.copyOf
+  2.2%  com/dashjoin/jsonata/Jsonata.evaluateStep
+  2.2%  com/dashjoin/jsonata/Utils.recurse
+  1.8%  com/dashjoin/jsonata/Jsonata._evaluate
+  1.6%  com/dashjoin/jsonata/Jsonata.evaluate
+  1.2%  com/dashjoin/jsonata/Functions.append
+  1.1%  java/util/regex/Matcher.getTextLength
+  0.8%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+  0.7%  com/dashjoin/jsonata/utils/Signature.getSymbol
+  0.7%  com/dashjoin/jsonata/utils/Signature.validate
+  0.5%  com/dashjoin/jsonata/Utils.__createSequence
+  0.5%  java/util/ArrayList$Itr.next
+  0.5%  java/lang/String.equals
+  0.4%  java/util/regex/Pattern.compile
+  0.4%  java/lang/invoke/Invokers$Holder.invokeExact_MT
+  0.4%  java/util/regex/Pattern.split
+  0.4%  java/util/LinkedHashMap.sequencedEntrySet
+  0.3%  java/util/HashMap.resize
+  0.2%  java/util/HashMap.putVal
+  0.2%  java/util/regex/Pattern.matcher
+  0.2%  java/util/LinkedHashMap.newNode
+
+### top inclusive frames
+
+100.0%  compat/bench/Bench.main
+100.0%  com/dashjoin/jsonata/Jsonata.evaluate
+ 58.0%  com/dashjoin/jsonata/Jsonata._evaluate
+ 58.0%  com/dashjoin/jsonata/Jsonata.evaluatePath
+ 58.0%  com/dashjoin/jsonata/Jsonata.evaluateStep
+ 57.8%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+ 57.8%  com/dashjoin/jsonata/Jsonata.evaluateUnary
+ 39.8%  com/dashjoin/jsonata/Functions.validateInput
+ 32.9%  java/util/HashMap.getNode
+ 28.6%  java/util/LinkedHashMap.get
+ 25.9%  com/dashjoin/jsonata/Functions.lookup
+ 25.9%  com/dashjoin/jsonata/Jsonata.evaluateName
+ 13.1%  com/dashjoin/jsonata/Jsonata.evaluateFunction
+  9.1%  java/lang/String.hashCode
+  9.0%  java/util/HashMap.hash
+  5.7%  com/dashjoin/jsonata/Jsonata.applyInner
+  5.7%  com/dashjoin/jsonata/Jsonata.apply
+  4.7%  com/dashjoin/jsonata/Jsonata.validateArguments
+  4.6%  com/dashjoin/jsonata/utils/Signature.validate
+  4.6%  com/dashjoin/jsonata/Jsonata$JFunction.validate
+  4.4%  com/dashjoin/jsonata/Jsonata$Frame.lookup
+  4.2%  java/util/HashMap.containsKey
+  4.2%  java/util/Arrays.copyOf
+  3.7%  java/util/ArrayList.grow
+  3.0%  java/util/ArrayList.add
+
+### top allocated types (sampled weight, total 9007 MB)
+
+ 49.4%  [Ljava/lang/Object;
+ 17.6%  com/dashjoin/jsonata/Utils$JList
+ 11.5%  java/util/ArrayList$Itr
+  3.0%  java/lang/String
+  3.0%  java/util/regex/Pattern
+  2.7%  [I
+  2.6%  java/util/regex/Pattern$Start
+  1.9%  java/util/ArrayList
+  1.7%  java/util/regex/Matcher
+  1.6%  [Ljava/lang/Class;
+  1.4%  [Ljava/util/regex/IntHashSet;
+  1.4%  java/util/ArrayList$ArrayListSpliterator
+  0.6%  com/dashjoin/jsonata/Jsonata$GroupEntry
+  0.3%  [B
+  0.3%  java/util/LinkedHashMap$Entry
+  0.3%  java/util/stream/ReferencePipeline$6
+  0.1%  [Ljava/lang/String;
+  0.1%  java/util/LinkedHashMap$LinkedEntrySet
+  0.1%  java/util/regex/Pattern$TreeInfo
+  0.1%  java/lang/Double
+  0.0%  java/util/stream/ReferencePipeline$6$1
+  0.0%  java/util/LinkedHashMap$LinkedEntryIterator
+  0.0%  [D
+  0.0%  java/util/stream/ReduceOps$13ReducingSink
+  0.0%  java/util/stream/ReferencePipeline$Head
+
+### top allocation sites (first non-JDK-collection frame)
+
+ 32.3%  java/util/ArrayList.grow
+ 12.0%  java/util/Arrays.copyOf
+ 11.9%  com/dashjoin/jsonata/Utils.__createSequence
+ 11.5%  java/util/ArrayList.iterator
+  5.7%  com/dashjoin/jsonata/Functions.append
+  5.1%  java/util/ArrayList.<init>
+  4.7%  java/util/regex/Pattern.compile
+  3.9%  java/util/regex/Matcher.<init>
+  2.6%  java/util/regex/Pattern.<init>
+  1.7%  java/util/regex/Pattern.matcher
+  1.6%  java/lang/String.valueOf
+  1.5%  java/lang/reflect/Method.getParameterTypes
+  1.4%  java/lang/StringConcatHelper.simpleConcat
+  1.4%  java/util/ArrayList.spliterator
+  0.6%  com/dashjoin/jsonata/Jsonata.evaluateGroupExpression
+  0.4%  java/util/regex/Pattern.split
+  0.3%  java/lang/StringLatin1.toBytes
+  0.3%  java/util/LinkedHashMap.newNode
+  0.3%  java/util/stream/ReferencePipeline.mapToDouble
+  0.2%  com/dashjoin/jsonata/utils/Signature.validate
+  0.1%  java/util/LinkedHashMap.sequencedEntrySet
+  0.1%  java/util/regex/Pattern$Start.<init>
+  0.1%  java/lang/Double.valueOf
+  0.0%  java/lang/Object.clone
+  0.0%  java/util/stream/ReferencePipeline$6.opWrapSink

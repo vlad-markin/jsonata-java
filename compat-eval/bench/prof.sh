@@ -7,7 +7,7 @@ OUT="${1:-$HERE/../phase5/results/profile}"; mkdir -p "$OUT" prof
 (cd jvm && mvn -q package -DskipTests)
 run() { # query size seconds
   local q=$1 n=$2 s=$3
-  java -Xms4g -Xmx4g -XX:+UseG1GC -XX:StartFlightRecording=filename=prof/$q-$n.jfr,settings=profile \
+  nice -n -10 java -Xms3g -Xmx3g -XX:+UseG1GC -XX:StartFlightRecording=filename=prof/$q-$n.jfr,settings=profile \
        -cp jvm/target/classes compat.bench.Bench --queries queries.json --data data/model-$n.json --size $n \
        --only $q --warmup 3 --iters 100000 --min-iters 3 --budget-ms $((s*1000)) --out prof/prof.jsonl 2>&1 | grep -v JAVA_TOOL | grep -v '^\[0' || true
   python3 jfr_agg.py prof/$q-$n.jfr 25 Jsonata.evaluate > "$OUT/$q-$n.txt"
