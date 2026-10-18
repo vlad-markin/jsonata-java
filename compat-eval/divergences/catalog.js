@@ -16,7 +16,7 @@ const H = (name, impl, signature) => ({ name, impl, signature });
 module.exports = [
     // ------------------------------------------------------------------ API / evaluation model
     {
-        id: 'API-01', cat: 'api', severity: 'high', solution: 'engine', complexity: 'S',
+        id: 'API-01', fixedBy: 'CompatJs222Test.api01_*', cat: 'api', severity: 'high', solution: 'engine', complexity: 'S',
         title: 'Общее окружение между вызовами evaluate без Frame: `:=` на верхнем уровне и `$$` утекают, параллельные вызовы дают неверный результат',
         js: 'каждый evaluate получает новый frame (исправлено в 2.2.2, df63a7c)',
         jvm: 'без Frame используется общий `environment` скомпилированного выражения',
@@ -24,7 +24,7 @@ module.exports = [
         cases: [],
     },
     {
-        id: 'API-02', cat: 'api', severity: 'medium', solution: 'engine', complexity: 'M',
+        id: 'API-02', fixedBy: 'CompatJs222Test.api02_callLambdaFromOtherThread', cat: 'api', severity: 'medium', solution: 'engine', complexity: 'M',
         title: 'Лямбды можно вызвать из хоста только в потоке вычисления (Functions.funcApply опирается на ThreadLocal)',
         js: '`fn.apply(self, args)` работает всегда (Promise)',
         jvm: 'NPE при вызове из другого потока, в т.ч. лямбды, возвращённой как результат',
@@ -96,6 +96,7 @@ module.exports = [
             { expr: "o = {'x': 1}", input: { o: { x: 1 } } },
             { expr: 'a != [1.5,2]', input: { a: [1.5, 2] } },
             { expr: '$distinct([1, 1.0, n])', input: { n: 1 } },
+            { expr: '[1] in [[1]]' }, { expr: "{'a':1} in [{'a':1}]" },
         ],
     },
     {
@@ -157,7 +158,7 @@ module.exports = [
     {
         id: 'NUM-10', cat: 'number', severity: 'low', solution: 'exception', complexity: 'S',
         title: 'Бесконечность как результат: JS возвращает Infinity/NaN (`1/0`, `$eval("1/0")`, `x % 0`), JVM — ошибку D1001/D3121',
-        cases: [{ expr: '1/0' }, { expr: "$eval('1/0')" }, { expr: '5 % 0' }],
+        cases: [{ expr: '1/0' }, { expr: "$eval('1/0')" }, { expr: '5 % 0' }, { expr: '$string(1/0)' }],
         note: 'Результат JS не сериализуется в JSON. Ошибка в JVM полезнее; считать исключением',
     },
     {
@@ -187,8 +188,8 @@ module.exports = [
     },
     {
         id: 'STR-04', cat: 'string', severity: 'low', solution: 'engine', complexity: 'S',
-        title: '`$string(x, true)`: пустой объект печатается как `{\\n  }`; U+2028/U+2029 экранируются',
-        cases: [{ expr: "$string({'a':{}}, true)" }, { expr: "$string(['x\\u2028y'])" }],
+        title: '`$string`: символы U+0080–U+009F и U+2000–U+20FF (кавычки “”, тире, €, …) экранируются как \\uXXXX; пустой объект при pretty-print печатается как `{\\n  }`',
+        cases: [{ expr: "$string({'a':{}}, true)" }, { expr: "$string(['x\\u2028y'])" }, { expr: "$string({'a': '€ “q” – …'})" }],
     },
     // ------------------------------------------------------------------ regex
     {
@@ -204,7 +205,6 @@ module.exports = [
         title: 'Семантика regex: `\\s` (в JS включает NBSP, U+2028, BOM…), `$` перед финальным `\\n`, регистронезависимость для не-ASCII, `.`/классы на суррогатных парах',
         cases: [
             { expr: "$replace('a\\u00a0b', /\\s/, '_')" }, { expr: "$contains('abc\\n', /c$/)" }, { expr: "$contains('é', /É/i)" },
-            { expr: "$match('a😀b', /./).match" }, { expr: "$replace('😀', /[😀]/, 'x')" },
         ],
     },
     {
@@ -233,7 +233,7 @@ module.exports = [
         title: '`$replace`: `$$` в строке замены — исключение; функция замены, вернувшая не строку, — NPE/ClassCast вместо D3012; коды D3010/D3011 — текстом; непойманные группы — null вместо undefined',
         cases: [
             { expr: "$replace('abc', /b/, '$$')" }, { expr: "$replace('abc', /b/, function($m){42})" },
-            { expr: "$replace('abc', '', 'x')" }, { expr: "$replace('abc', 'b', 'x', -1)" }, { expr: "$match('b', /(a)|(b)/).groups" },
+            { expr: "$replace('abc', '', 'x')" }, { expr: "$replace('abc', 'b', 'x', -1)" }, { expr: "$replace('a.b', '.', 'x', 1)" },
         ],
     },
     // ------------------------------------------------------------------ dates
@@ -317,11 +317,49 @@ module.exports = [
     {
         id: 'ERR-02', cat: 'error', severity: 'low', solution: 'engine', complexity: 'S',
         title: 'Другой код ошибки: `$number("10e500")` D1001 вместо D3030, `$string(1/0)` D1001 вместо D3001, частичное применение T1008 вместо T1007, `$type(age) = …` «Unexpected» вместо D3030',
-        cases: [{ expr: "$number('10e500')" }, { expr: '$string(1/0)' }, { expr: 'substring(?, 0, ?)' }],
+        cases: [{ expr: "$number('10e500')" }, { expr: 'substring(?, 0, ?)' }],
     },
     {
         id: 'ERR-03', cat: 'error', severity: 'low', solution: 'question', complexity: 'S',
         title: 'Структура ошибки: у JException нет раздельных `token`/`value` (одно поле `current`), сообщения отличаются кавычками; «Expected ) before end» — token `)` вместо `(end)`',
         cases: [{ expr: 'foo(' }, { expr: '$uppercase(1)' }],
+    },
+    // ------------------------------------------------------------------ found while fixing
+    {
+        id: 'API-07', fixedBy: 'CompatJs222Test.api07_evaluationTimePerExpression', cat: 'api', severity: 'high', solution: 'engine', complexity: 'S',
+        title: 'Общий ThreadLocal `Jsonata.current` для всех выражений: `$now()`/`$millis()` закэшированного выражения возвращают время чужого вычисления (устаревшее), вложенное вычисление другого выражения из функции хоста сбивает контекст',
+        evidence: 'CompatJs222Test.api07_evaluationTimePerExpression (до исправления: $millis() устарел на 1,5 с)',
+        cases: [],
+    },
+    {
+        id: 'PART-01', cat: 'api', severity: 'high', solution: 'engine', complexity: 'S',
+        title: 'Частичное применение: значение токена `?` — Character, проверка заполнителя не срабатывала; любые undefined/недостающие аргументы становились параметрами (`$map(arr, $substring(?, 1))` получал индекс как length)',
+        cases: [
+            { expr: "$map(['abc','def'], $substring(?, 1))" }, { expr: "($p := function($a,$b,$c){[$a,$b,$c]}(?, 2); $map([1,2], $p))" },
+            { expr: "$map(['ab','cd'], $match(?, /b/))" },
+        ],
+    },
+    {
+        id: 'ERR-04', cat: 'error', severity: 'low', solution: 'engine', complexity: 'M',
+        title: 'Тексты сообщений: в шаблонах порта «function» заменено на «Object», аргументы подставлялись не в те места и всегда в кавычках (совпадало 28% сообщений)',
+        evidence: 'выборка 2158 ошибок с одинаковым кодом: до исправления 28% одинаковых сообщений, после — см. REPORT.md',
+        cases: [{ expr: '$min(2, 3)' }, { expr: "1 < 'a'" }, { expr: "$average(['1','2'])" }],
+    },
+    {
+        id: 'RE-07', cat: 'regex', severity: 'low', solution: 'exception', complexity: 'L',
+        title: 'Regex и символы вне BMP (эмодзи): JS без флага u сопоставляет кодовые единицы UTF-16 (`.` берёт половину суррогатной пары), java.util.regex — кодовые точки',
+        cases: [{ expr: "$match('a😀b', /./).match" }, { expr: "$replace('😀', /[😀]/, 'x')" }],
+        note: 'Повторить поведение JS в java.util.regex нельзя без собственного regex-движка. Детектор миграции (RE-07) находит regex-литералы с такими символами',
+    },
+    {
+        id: 'UND-03', cat: 'null', severity: 'low', solution: 'exception', complexity: 'S',
+        title: 'Непойманная группа regex: в JS элемент `groups` равен undefined, в JVM — null (Java-список не хранит undefined; после JSON-сериализации одинаково)',
+        cases: [{ expr: "$match('b', /(a)|(b)/).groups" }, { expr: "$match('ac', /a(b)?c/).groups" }],
+    },
+    {
+        id: 'AHEAD-01', cat: 'api', severity: 'low', solution: 'exception', complexity: 'S',
+        title: 'JVM опережает 2.2.2: `$split`/`$replace` с undefined-шаблоном возвращают undefined (в JS 2.2.2 TypeError), `$pad` с шириной > 1e7 — D2016 (в JS строка любой длины). Оба исправлены в jsonata-js после 2.2.2',
+        cases: [{ expr: "$split('a,b', nothing)" }, { expr: "$length($pad('x', 20000000))" }],
+        note: 'Выражения, падающие в JS, не могут быть в рабочем корпусе; $pad > 1e7 находит детектор (PAD-01)',
     },
 ];

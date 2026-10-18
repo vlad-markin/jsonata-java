@@ -28,8 +28,11 @@ if (mode === 'cases') {
     const status = {};
     for (const d of catalog) {
         const res = d.cases.map((c, i) => diffs.get(d.id + '#' + (i + 1))).filter(Boolean);
-        const relevant = d.cat === 'error' ? res.filter(r => r.category !== 'MATCH') : res.filter(r => r.category !== 'MATCH' && r.category !== 'ERROR_TOKEN');
-        status[d.id] = d.cases.length === 0 ? 'см. evidence' : (relevant.length === 0 ? 'устранено' : 'воспроизводится ' + relevant.length + '/' + res.length);
+        // ERROR_TOKEN is ERR-03 (structure of the error object); ERR-04 is about messages
+        const ok = new Set(['MATCH', 'CRASH_BOTH']);
+        if (d.id !== 'ERR-03') ok.add('ERROR_TOKEN');
+        const relevant = res.filter(r => !ok.has(r.category) || (d.id === 'ERR-04' && (r.info || []).includes('ERROR_MESSAGE')));
+        status[d.id] = d.cases.length === 0 ? (d.fixedBy ? 'устранено (' + d.fixedBy + ')' : 'см. evidence') : (relevant.length === 0 ? 'устранено' : 'воспроизводится ' + relevant.length + '/' + res.length);
         md += `| [${d.id}](#${d.id.toLowerCase()}) | ${d.cat} | ${d.severity} | ${SOL[d.solution]} | ${d.complexity} | ${status[d.id]} | ${esc(d.title).slice(0, 110)}${d.title.length > 110 ? '…' : ''} |\n`;
     }
     md += '\n## Подробно\n';

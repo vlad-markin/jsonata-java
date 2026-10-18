@@ -20,6 +20,8 @@
 {"id":"NUM-01#2","tags":["div","div:NUM-01"],"expr":"o = {'x': 1}","input":{"o":{"x":1}}}
 {"id":"NUM-01#3","tags":["div","div:NUM-01"],"expr":"a != [1.5,2]","input":{"a":[1.5,2]}}
 {"id":"NUM-01#4","tags":["div","div:NUM-01"],"expr":"$distinct([1, 1.0, n])","input":{"n":1}}
+{"id":"NUM-01#5","tags":["div","div:NUM-01"],"expr":"[1] in [[1]]"}
+{"id":"NUM-01#6","tags":["div","div:NUM-01"],"expr":"{'a':1} in [{'a':1}]"}
 {"id":"NUM-02#1","tags":["div","div:NUM-02"],"expr":"$string(1e20)"}
 {"id":"NUM-02#2","tags":["div","div:NUM-02"],"expr":"12345678901234567890 & ''"}
 {"id":"NUM-02#3","tags":["div","div:NUM-02"],"expr":"$string($power(2, 64))"}
@@ -51,6 +53,7 @@
 {"id":"NUM-10#1","tags":["div","div:NUM-10"],"expr":"1/0"}
 {"id":"NUM-10#2","tags":["div","div:NUM-10"],"expr":"$eval('1/0')"}
 {"id":"NUM-10#3","tags":["div","div:NUM-10"],"expr":"5 % 0"}
+{"id":"NUM-10#4","tags":["div","div:NUM-10"],"expr":"$string(1/0)"}
 {"id":"NUM-11#1","tags":["div","div:NUM-11"],"expr":"$power(0.30000000000000004, 3)"}
 {"id":"STR-01#1","tags":["div","div:STR-01"],"expr":"$substring('a😀b😀c', 1, 3)"}
 {"id":"STR-01#2","tags":["div","div:STR-01"],"expr":"$substring('a😀b😀c', -2)"}
@@ -64,6 +67,7 @@
 {"id":"STR-03#3","tags":["div","div:STR-03"],"expr":"$base64decode('!!!')"}
 {"id":"STR-04#1","tags":["div","div:STR-04"],"expr":"$string({'a':{}}, true)"}
 {"id":"STR-04#2","tags":["div","div:STR-04"],"expr":"$string(['x\\u2028y'])"}
+{"id":"STR-04#3","tags":["div","div:STR-04"],"expr":"$string({'a': '€ “q” – …'})"}
 {"id":"RE-01#1","tags":["div","div:RE-01"],"expr":"$replace('ab', /[^]/, 'x')"}
 {"id":"RE-01#2","tags":["div","div:RE-01"],"expr":"$contains('a', /\\0/)"}
 {"id":"RE-01#3","tags":["div","div:RE-01"],"expr":"$match('a\\bb', /[\\b]/)"}
@@ -72,8 +76,6 @@
 {"id":"RE-02#1","tags":["div","div:RE-02"],"expr":"$replace('a\\u00a0b', /\\s/, '_')"}
 {"id":"RE-02#2","tags":["div","div:RE-02"],"expr":"$contains('abc\\n', /c$/)"}
 {"id":"RE-02#3","tags":["div","div:RE-02"],"expr":"$contains('é', /É/i)"}
-{"id":"RE-02#4","tags":["div","div:RE-02"],"expr":"$match('a😀b', /./).match"}
-{"id":"RE-02#5","tags":["div","div:RE-02"],"expr":"$replace('😀', /[😀]/, 'x')"}
 {"id":"RE-03#1","tags":["div","div:RE-03"],"expr":"$match('ab', /x*/)"}
 {"id":"RE-03#2","tags":["div","div:RE-03"],"expr":"$replace('abracadabra', /.*?/, '$1')"}
 {"id":"RE-03#3","tags":["div","div:RE-03"],"expr":"$split('ab', /x*/)"}
@@ -87,7 +89,7 @@
 {"id":"RE-06#2","tags":["div","div:RE-06"],"expr":"$replace('abc', /b/, function($m){42})"}
 {"id":"RE-06#3","tags":["div","div:RE-06"],"expr":"$replace('abc', '', 'x')"}
 {"id":"RE-06#4","tags":["div","div:RE-06"],"expr":"$replace('abc', 'b', 'x', -1)"}
-{"id":"RE-06#5","tags":["div","div:RE-06"],"expr":"$match('b', /(a)|(b)/).groups"}
+{"id":"RE-06#5","tags":["div","div:RE-06"],"expr":"$replace('a.b', '.', 'x', 1)"}
 {"id":"DT-01#1","tags":["div","div:DT-01"],"expr":"$toMillis('2018-02')"}
 {"id":"DT-01#2","tags":["div","div:DT-01"],"expr":"$toMillis('20180201')"}
 {"id":"DT-01#3","tags":["div","div:DT-01"],"expr":"$toMillis('2018-02-30')"}
@@ -120,7 +122,18 @@
 {"id":"ERR-01#3","tags":["div","div:ERR-01"],"expr":"null + 1"}
 {"id":"ERR-01#4","tags":["div","div:ERR-01"],"expr":"{'x': 1, 'x': 2}"}
 {"id":"ERR-02#1","tags":["div","div:ERR-02"],"expr":"$number('10e500')"}
-{"id":"ERR-02#2","tags":["div","div:ERR-02"],"expr":"$string(1/0)"}
-{"id":"ERR-02#3","tags":["div","div:ERR-02"],"expr":"substring(?, 0, ?)"}
+{"id":"ERR-02#2","tags":["div","div:ERR-02"],"expr":"substring(?, 0, ?)"}
 {"id":"ERR-03#1","tags":["div","div:ERR-03"],"expr":"foo("}
 {"id":"ERR-03#2","tags":["div","div:ERR-03"],"expr":"$uppercase(1)"}
+{"id":"PART-01#1","tags":["div","div:PART-01"],"expr":"$map(['abc','def'], $substring(?, 1))"}
+{"id":"PART-01#2","tags":["div","div:PART-01"],"expr":"($p := function($a,$b,$c){[$a,$b,$c]}(?, 2); $map([1,2], $p))"}
+{"id":"PART-01#3","tags":["div","div:PART-01"],"expr":"$map(['ab','cd'], $match(?, /b/))"}
+{"id":"ERR-04#1","tags":["div","div:ERR-04"],"expr":"$min(2, 3)"}
+{"id":"ERR-04#2","tags":["div","div:ERR-04"],"expr":"1 < 'a'"}
+{"id":"ERR-04#3","tags":["div","div:ERR-04"],"expr":"$average(['1','2'])"}
+{"id":"RE-07#1","tags":["div","div:RE-07"],"expr":"$match('a😀b', /./).match"}
+{"id":"RE-07#2","tags":["div","div:RE-07"],"expr":"$replace('😀', /[😀]/, 'x')"}
+{"id":"UND-03#1","tags":["div","div:UND-03"],"expr":"$match('b', /(a)|(b)/).groups"}
+{"id":"UND-03#2","tags":["div","div:UND-03"],"expr":"$match('ac', /a(b)?c/).groups"}
+{"id":"AHEAD-01#1","tags":["div","div:AHEAD-01"],"expr":"$split('a,b', nothing)"}
+{"id":"AHEAD-01#2","tags":["div","div:AHEAD-01"],"expr":"$length($pad('x', 20000000))"}
