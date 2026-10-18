@@ -354,24 +354,42 @@ public class Functions {
             return null;
         }
 
-        Integer start = _start!=null ? _start.intValue() : null;
-        Integer length = _length!=null ? _length.intValue() : null;
-
-        // not used: var strArray = stringToArray(str);
-        var strLength = str.length();
+        // jsonata-js: operate on code points (Array.from), slice semantics for start/end
+        int[] strArray = str.codePoints().toArray();
+        int strLength = strArray.length;
+        double start = _start != null ? _start.doubleValue() : 0;
 
         if (strLength + start < 0) {
             start = 0;
         }
 
-        if (length != null) {
+        if (_length != null) {
+            double length = _length.doubleValue();
             if (length <= 0) {
                 return "";
             }
-            return substr(str, start, length);
+            double end = start >= 0 ? start + length : strLength + start + length;
+            return slice(strArray, start, end);
         }
 
-        return substr(str, start, strLength);
+        return slice(strArray, start, strLength);
+    }
+
+    /** Array.prototype.slice(start, end).join('') on code points */
+    static String slice(int[] cps, double start, double end) {
+        int from = sliceIndex(start, cps.length), to = sliceIndex(end, cps.length);
+        if (from >= to)
+            return "";
+        return new String(cps, from, to - from);
+    }
+
+    static int sliceIndex(double x, int len) {
+        if (Double.isNaN(x))
+            return 0;
+        double t = x < 0 ? Math.ceil(x) : Math.floor(x);
+        if (t < 0)
+            return (int) Math.max(len + t, 0);
+        return (int) Math.min(t, len);
     }
 
 

@@ -183,4 +183,14 @@ public class CompatJs222Test {
         assertEquals("[\n  [],\n  {}\n]", jsonata("$string([[],{}], true)").evaluate(null));
         assertEquals("[\"\ud83d\ude00\"]", jsonata("$string(['\ud83d\ude00'])").evaluate(null));
     }
+
+    /** STR-01: $substring counts code points (surrogate pairs are one character) with slice semantics. */
+    @Test
+    public void str01_substringCodePoints() {
+        assertEquals("\ud83d\ude00b\ud83d\ude00", jsonata("$substring('a\ud83d\ude00b\ud83d\ude00c', 1, 3)").evaluate(null));
+        assertEquals("\ud83d\ude00c", jsonata("$substring('a\ud83d\ude00b\ud83d\ude00c', -2)").evaluate(null));
+        assertEquals("\ud83d\ude00", jsonata("$substring('\ud83d\ude00', -3)").evaluate(null));
+        assertEquals("bc", jsonata("$substring('abc', 1.5, 1.5)").evaluate(null));
+        assertEquals("", jsonata("$substring('abc', 1, 0)").evaluate(null));
+    }
 }
