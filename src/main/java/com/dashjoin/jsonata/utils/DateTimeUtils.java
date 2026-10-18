@@ -45,18 +45,16 @@ import java.io.Serializable;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.Month;
 import java.time.ZoneOffset;
 import java.time.temporal.IsoFields;
 import java.time.temporal.WeekFields;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Stack;
-import java.util.Vector;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -65,7 +63,8 @@ import java.util.stream.Collectors;
 // import org.apache.commons.lang3.tuple.ImmutablePair;
 // import org.apache.commons.lang3.tuple.Pair;
 
-import com.dashjoin.jsonata.Functions;
+import com.dashjoin.jsonata.JException;
+import com.dashjoin.jsonata.Utils;
 
 public class DateTimeUtils implements Serializable {
 
@@ -130,28 +129,6 @@ public class DateTimeUtils implements Serializable {
         return words;
     }
 
-    private static Map<String, Integer> wordValues = new HashMap<>();
-    static {
-        for (int i = 0; i < few.length; i++) {
-            wordValues.put(few[i].toLowerCase(), i);
-        }
-        for (int i = 0; i < ordinals.length; i++) {
-            wordValues.put(ordinals[i].toLowerCase(), i);
-        }
-        for (int i = 0; i < decades.length; i++) {
-            String lword = decades[i].toLowerCase();
-            wordValues.put(lword, (i + 2) * 10);
-            wordValues.put(lword.substring(0, lword.length() - 1) + "ieth", wordValues.get(lword));
-        }
-        wordValues.put("hundreth", 100);
-        for (int i = 0; i < magnitudes.length; i++) {
-            String lword = magnitudes[i].toLowerCase();
-            int val = (int) Math.pow(10, (i + 1) * 3);
-            wordValues.put(lword, val);
-            wordValues.put(lword + "th", val);
-        }
-    }
-
     private static Map<String, Long> wordValuesLong = new HashMap<>();
     static {
         for (int i = 0; i < few.length; i++) {
@@ -175,31 +152,8 @@ public class DateTimeUtils implements Serializable {
         }
     }
 
-    public static int wordsToNumber(String text) {
-        String[] parts = text.split(",\\s|\\sand\\s|[\\s\\-]");
-        Integer[] values = new Integer[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            values[i] = wordValues.get(parts[i]);
-        }
-        Stack<Integer> segs = new Stack<>();
-        segs.push(0);
-        for (Integer value : values) {
-            if (value < 100) {
-                Integer top = segs.pop();
-                if (top >= 1000) {
-                    segs.push(top);
-                    top = 0;
-                }
-                segs.push(top + value);
-            } else {
-                segs.push(segs.pop() * value);
-            }
-        }
-        return segs.stream().mapToInt(i -> i.intValue()).sum();
-    }
-
     /**
-     * long version of above
+     * parses english words to a long value
      */
     public static long wordsToLong(String text) {
       String[] parts = text.split(",\\s|\\sand\\s|[\\s\\-]");
@@ -273,16 +227,6 @@ public class DateTimeUtils implements Serializable {
         return values;
     }
 
-    private static String decimalToRoman(int value) {
-        for (int i = 0; i < romanNumerals.length; i++) {
-            RomanNumeral numeral = romanNumerals[i];
-            if (value >= numeral.getValue()) {
-                return numeral.getLetters() + decimalToRoman(value - numeral.getValue());
-            }
-        }
-        return "";
-    }
-
     public static int romanToDecimal(String roman) {
         int decimal = 0;
         int max = 1;
@@ -299,19 +243,14 @@ public class DateTimeUtils implements Serializable {
         return decimal;
     }
 
-    private static String decimalToLetters(int value, String aChar) {
-        Vector<String> letters = new Vector<>();
-        char aCode = aChar.charAt(0);
-        while (value > 0) {
-            letters.insertElementAt(Character.toString((char) ((value - 1) % 26 + aCode)), 0);
-            value = (value - 1) / 26;
-        }
-        return letters.stream().reduce("", (a, b) -> a + b);
-    }
-
     public static String formatInteger(long value, String picture) {
         Format format = analyseIntegerPicture(picture);
-        return formatInteger(value, format);
+        return formatInteger((double) value, format);
+    }
+
+    /** jsonata-js formatInteger(value, picture) on a JavaScript number */
+    static String formatInteger(double value, String picture) {
+        return formatInteger(Math.floor(value), analyseIntegerPicture(picture));
     }
 
     enum formats {
@@ -344,10 +283,13 @@ public class DateTimeUtils implements Serializable {
         public tcase case_type = tcase.LOWER;
         public boolean ordinal = false;
         public int zeroCode = 0;
-        public int mandatoryDigits = 0;
+        /** a JavaScript number (NaN if set from an invalid width modifier) */
+        public double mandatoryDigits = 0;
         public int optionalDigits = 0;
+        /** exact number of digits to parse (null = any) */
+        public Double parseWidth;
         public boolean regular = false;
-        public Vector<GroupingSeparator> groupingSeparators = new Vector<>();
+        public List<GroupingSeparator> groupingSeparators = new ArrayList<>();
         public String token;
     }
 
@@ -362,26 +304,111 @@ public class DateTimeUtils implements Serializable {
         }
     }
 
-    private static Map<String, String> suffix123 = createSuffixMap();
-
-    private static Map<String, String> createSuffixMap() {
-        Map<String, String> suffix = new HashMap<>();
-        suffix.put("1", "st");
-        suffix.put("2", "nd");
-        suffix.put("3", "rd");
-        return suffix;
+    /** a JavaScript TypeError / RangeError: not a JSONata error */
+    private static RuntimeException jsError(String message) {
+        return new IllegalStateException(message);
     }
 
-    private static String formatInteger(long value, Format format) {
+    /** String.prototype.substr(start, length) */
+    private static String jsSubstr(String s, int start, Integer length) {
+        int len = s.length();
+        if (start < 0)
+            start = Math.max(len + start, 0);
+        start = Math.min(start, len);
+        int end = length == null ? len : Math.min(start + Math.max(length, 0), len);
+        return s.substring(start, end);
+    }
+
+    /** String.prototype.substring(start, end) */
+    private static String jsSubstring(String s, double start, double end) {
+        int len = s.length();
+        int a = (int) Math.min(Math.max(Double.isNaN(start) ? 0 : start, 0), len);
+        int b = (int) Math.min(Math.max(Double.isNaN(end) ? 0 : end, 0), len);
+        return s.substring(Math.min(a, b), Math.max(a, b));
+    }
+
+    /** JavaScript parseInt(s) (without radix) */
+    static double jsParseInt(String s) {
+        int i = 0, n = s.length();
+        while (i < n && (JS_WHITESPACE.indexOf(s.charAt(i)) >= 0))
+            i++;
+        double sign = 1;
+        if (i < n && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+            if (s.charAt(i) == '-')
+                sign = -1;
+            i++;
+        }
+        int radix = 10;
+        if (i + 1 < n && s.charAt(i) == '0' && (s.charAt(i + 1) == 'x' || s.charAt(i + 1) == 'X')) {
+            radix = 16;
+            i += 2;
+        }
+        int start = i;
+        while (i < n && Character.digit(s.charAt(i), radix) >= 0 && s.charAt(i) < 128)
+            i++;
+        if (i == start)
+            return Double.NaN;
+        String digits = s.substring(start, i);
+        double v;
+        if (radix == 10)
+            v = Double.parseDouble(digits);
+        else
+            v = new BigInteger(digits, 16).doubleValue();
+        return sign * v;
+    }
+
+    private static final String JS_WHITESPACE = "\t\n\u000B\f\r                  　﻿";
+
+    private static boolean truthy(Double d) {
+        return d != null && d != 0 && !d.isNaN();
+    }
+
+    private static String decimalToLetters(double value, char aChar) {
+        StringBuilder letters = new StringBuilder();
+        while (value > 0) {
+            letters.insert(0, (char) ((value - 1) % 26 + aChar));
+            value = Math.floor((value - 1) / 26);
+        }
+        return letters.toString();
+    }
+
+    private static String decimalToRoman(double value) {
+        if (value / 1000 > 10000)
+            // the recursive jsonata-js implementation exceeds the call stack
+            throw jsError("Maximum call stack size exceeded");
+        StringBuilder b = new StringBuilder();
+        boolean found = true;
+        while (found) {
+            found = false;
+            for (RomanNumeral numeral : romanNumerals) {
+                if (value >= numeral.getValue()) {
+                    b.append(numeral.getLetters());
+                    value -= numeral.getValue();
+                    found = true;
+                    break;
+                }
+            }
+        }
+        return b.toString();
+    }
+
+    private static String numberToWords(double value, boolean ordinal) {
+        if (Double.isNaN(value))
+            // the recursive jsonata-js implementation does not terminate
+            throw jsError("Maximum call stack size exceeded");
+        return numberToWords((long) value, ordinal);
+    }
+
+    private static String formatInteger(double value, Format format) {
         String formattedInteger = "";
         boolean negative = value < 0;
         value = Math.abs(value);
         switch (format.primary) {
             case LETTERS:
-                formattedInteger = decimalToLetters((int)value, format.case_type == tcase.UPPER ? "A" : "a");
+                formattedInteger = decimalToLetters(value, format.case_type == tcase.UPPER ? 'A' : 'a');
                 break;
             case ROMAN:
-                formattedInteger = decimalToRoman((int)value);
+                formattedInteger = decimalToRoman(value);
                 if (format.case_type == tcase.UPPER) {
                     formattedInteger = formattedInteger.toUpperCase();
                 }
@@ -395,35 +422,38 @@ public class DateTimeUtils implements Serializable {
                 }
                 break;
             case DECIMAL:
-                formattedInteger = "" + value;
-                int padLength = format.mandatoryDigits - formattedInteger.length();
+                formattedInteger = Utils.jsNumberToString(value);
+                double padLength = format.mandatoryDigits - formattedInteger.length();
                 if (padLength > 0) {
-                    formattedInteger = Functions.leftPad(formattedInteger, format.mandatoryDigits, "0");
+                    StringBuilder pad = new StringBuilder();
+                    for (int i = 0; i < padLength; i++)
+                        pad.append('0');
+                    formattedInteger = pad + formattedInteger;
                 }
                 if (format.zeroCode != 0x30) {
-                    char[] chars = formattedInteger.toCharArray();
-                    for (int i = 0; i < chars.length; i++) {
-                        chars[i] = (char) (chars[i] + format.zeroCode - 0x30);
-                    }
-                    formattedInteger = new String(chars);
+                    StringBuilder b = new StringBuilder();
+                    final int offset = format.zeroCode - 0x30;
+                    formattedInteger.codePoints().forEach(cp -> b.appendCodePoint(cp + offset));
+                    formattedInteger = b.toString();
                 }
                 if (format.regular) {
-                    int n = (formattedInteger.length() - 1) / format.groupingSeparators.elementAt(0).position;
+                    GroupingSeparator sep = format.groupingSeparators.get(0);
+                    int n = (int) Math.floor((formattedInteger.length() - 1) / (double) sep.position);
                     for (int i = n; i > 0; i--) {
-                        int pos = formattedInteger.length() - i * format.groupingSeparators.elementAt(0).position;
-                        formattedInteger = formattedInteger.substring(0, pos) + format.groupingSeparators.elementAt(0).character + formattedInteger.substring(pos);
+                        int pos = formattedInteger.length() - i * sep.position;
+                        formattedInteger = jsSubstr(formattedInteger, 0, pos) + sep.character + jsSubstr(formattedInteger, pos, null);
                     }
                 } else {
-                    Collections.reverse(format.groupingSeparators);
-                    for (GroupingSeparator separator : format.groupingSeparators) {
+                    for (int i = format.groupingSeparators.size() - 1; i >= 0; i--) {
+                        GroupingSeparator separator = format.groupingSeparators.get(i);
                         int pos = formattedInteger.length() - separator.position;
-                        formattedInteger = formattedInteger.substring(0, pos) + separator.character + formattedInteger.substring(pos);
+                        formattedInteger = jsSubstr(formattedInteger, 0, pos) + separator.character + jsSubstr(formattedInteger, pos, null);
                     }
                 }
 
                 if (format.ordinal) {
-                    String lastDigit = formattedInteger.substring(formattedInteger.length() - 1);
-                    String suffix = suffix123.get(lastDigit);
+                    char lastDigit = formattedInteger.charAt(formattedInteger.length() - 1);
+                    String suffix = lastDigit == '1' ? "st" : lastDigit == '2' ? "nd" : lastDigit == '3' ? "rd" : null;
                     if (suffix == null || (formattedInteger.length() > 1 && formattedInteger.charAt(formattedInteger.length() - 2) == '1')) {
                         suffix = "th";
                     }
@@ -431,7 +461,7 @@ public class DateTimeUtils implements Serializable {
                 }
                 break;
             case SEQUENCE:
-                throw new RuntimeException(String.format(Constants.ERR_MSG_SEQUENCE_UNSUPPORTED, format.token));
+                throw new JException("D3130", -1, format.token);
         }
         if (negative) {
             formattedInteger = "-" + formattedInteger;
@@ -445,7 +475,6 @@ public class DateTimeUtils implements Serializable {
         0x1946, 0x19D0, 0x1A80, 0x1A90, 0x1B50, 0x1BB0, 0x1C40, 0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, 0xA9F0, 0xAA50, 0xABF0, 0xFF10
     };
 
-    @SuppressWarnings("unused")
     private static Format analyseIntegerPicture(String picture) {
         Format format = new Format();
         String primaryFormat, formatModifier;
@@ -455,7 +484,7 @@ public class DateTimeUtils implements Serializable {
         } else {
             primaryFormat = picture.substring(0, semicolon);
             formatModifier = picture.substring(semicolon + 1);
-            if (formatModifier.charAt(0) == 'o') {
+            if (formatModifier.length() > 0 && formatModifier.charAt(0) == 'o') {
                 format.ordinal = true;
             }
         }
@@ -486,12 +515,11 @@ public class DateTimeUtils implements Serializable {
                 Integer zeroCode = null;
                 int mandatoryDigits = 0;
                 int optionalDigits = 0;
-                Vector<GroupingSeparator> groupingSeparators = new Vector<>();
+                List<GroupingSeparator> groupingSeparators = new ArrayList<>();
                 int separatorPosition = 0;
-                char[] formatCodepoints = primaryFormat.toCharArray();
-                //ArrayUtils.reverse(formatCodepoints);
-                for (int ix = formatCodepoints.length-1; ix >= 0; ix--) {
-                    char codePoint = formatCodepoints[ix];
+                int[] formatCodepoints = primaryFormat.codePoints().toArray();
+                for (int ix = formatCodepoints.length - 1; ix >= 0; ix--) {
+                    int codePoint = formatCodepoints[ix];
                     boolean digit = false;
                     for (int i = 0; i < decimalGroups.length; i++) {
                         int group = decimalGroups[i];
@@ -502,7 +530,7 @@ public class DateTimeUtils implements Serializable {
                             if (zeroCode == null) {
                                 zeroCode = group;
                             } else if (group != zeroCode) {
-                                throw new RuntimeException(Constants.ERR_MSG_DIFF_DECIMAL_GROUP);
+                                throw new JException("D3131", -1);
                             }
                             break;
                         }
@@ -512,7 +540,7 @@ public class DateTimeUtils implements Serializable {
                             separatorPosition++;
                             optionalDigits++;
                         } else {
-                            groupingSeparators.add(new GroupingSeparator(separatorPosition, Character.toString(codePoint)));
+                            groupingSeparators.add(new GroupingSeparator(separatorPosition, new String(Character.toChars(codePoint))));
                         }
                     }
                 }
@@ -525,7 +553,7 @@ public class DateTimeUtils implements Serializable {
                     int regular = getRegularRepeat(groupingSeparators);
                     if (regular > 0) {
                         format.regular = true;
-                        format.groupingSeparators.add(new GroupingSeparator(regular, groupingSeparators.elementAt(0).character));
+                        format.groupingSeparators.add(new GroupingSeparator(regular, groupingSeparators.get(0).character));
                     } else {
                         format.regular = false;
                         format.groupingSeparators = groupingSeparators;
@@ -541,14 +569,14 @@ public class DateTimeUtils implements Serializable {
         return format;
     }
 
-    private static int getRegularRepeat(Vector<GroupingSeparator> separators) {
+    private static int getRegularRepeat(List<GroupingSeparator> separators) {
         if (separators.size() == 0) {
             return 0;
         }
 
-        String sepChar = separators.elementAt(0).character;
+        String sepChar = separators.get(0).character;
         for (int i = 1; i < separators.size(); i++) {
-            if (!separators.elementAt(i).character.equals(sepChar)) {
+            if (!separators.get(i).character.equals(sepChar)) {
                 return 0;
             }
         }
@@ -595,7 +623,7 @@ public class DateTimeUtils implements Serializable {
 
         @SuppressWarnings("unused")
         String type;
-        Vector<SpecPart> parts = new Vector<>();
+        List<SpecPart> parts = new ArrayList<>();
 
         public PictureFormat(String type) {
             this.type = type;
@@ -604,35 +632,29 @@ public class DateTimeUtils implements Serializable {
         public void addLiteral(String picture, int start, int end) {
             if (end > start) {
                 String literal = picture.substring(start, end);
-                if (literal.equals("]]"))
-                  // handle special case where picture ends with ]], split yields empty array
-                  literal = "]";
-                else
-                  literal = String.join("]", literal.split("]]"));
+                // replace any doubled ]] with single ]
+                literal = literal.replace("]]", "]");
                 parts.add(new SpecPart("literal", literal));
             }
         }
-    }
-
-    private static class Pair<A,B> {
-        private A a; private B b;
-        Pair(A a, B b) { this.a=a; this.b=b; }
-        A getLeft() { return a; }
-        B getRight() { return b; }
     }
 
     private static class SpecPart {
 
         String type;
         String value;
+        /** the component specifier, '\0' if the marker is empty */
         char component;
-        Pair<Integer, Integer> width;
+        /** a width modifier is present */
+        boolean width;
+        /** min / max width as JavaScript numbers, null = undefined */
+        Double widthMin, widthMax;
         String presentation1;
         Character presentation2;
         boolean ordinal = false;
         public tcase names;
         public Format integerFormat;
-        public int n;
+        public double n = -1;
 
         public SpecPart(String type, String value) {
             this.type = type;
@@ -643,7 +665,13 @@ public class DateTimeUtils implements Serializable {
             this.type = type;
             this.component = component;
         }
+
+        boolean isComponent(String list) {
+            return component != '\0' && list.indexOf(component) != -1;
+        }
     }
+
+    private static final Pattern WHITESPACE = Pattern.compile("[" + JsRegex.WS + "]+");
 
     private static PictureFormat analyseDateTimePicture(String picture) {
         PictureFormat format = new PictureFormat("datetime");
@@ -651,7 +679,7 @@ public class DateTimeUtils implements Serializable {
         while (pos < picture.length()) {
             if (picture.charAt(pos) == '[') {
                 //check it's not a doubled [[
-                if (picture.charAt(pos + 1) == '[') {
+                if (pos + 1 < picture.length() && picture.charAt(pos + 1) == '[') {
                     //literal [
                     format.addLiteral(picture, start, pos);
                     format.parts.add(new SpecPart("literal", "["));
@@ -663,11 +691,12 @@ public class DateTimeUtils implements Serializable {
                 start = pos;
                 pos = picture.indexOf("]", start);
                 if (pos == -1) {
-                    throw new RuntimeException(Constants.ERR_MSG_NO_CLOSING_BRACKET);
+                    throw new JException("D3135", -1);
                 }
                 String marker = picture.substring(start + 1, pos);
-                marker = String.join("", marker.split("\\s+"));
-                SpecPart def = new SpecPart("marker", marker.charAt(0));
+                // whitespace within a variable marker is ignored (i.e. remove it)
+                marker = WHITESPACE.matcher(marker).replaceAll("");
+                SpecPart def = new SpecPart("marker", marker.isEmpty() ? '\0' : marker.charAt(0));
                 int comma = marker.lastIndexOf(",");
                 String presMod;
                 if (comma != -1) {
@@ -680,10 +709,12 @@ public class DateTimeUtils implements Serializable {
                         min = widthMod.substring(0, dash);
                         max = widthMod.substring(dash + 1);
                     }
-                    def.width = new Pair<Integer, Integer>(parseWidth(min), parseWidth(max));
+                    def.width = true;
+                    def.widthMin = parseWidth(min);
+                    def.widthMax = parseWidth(max);
                     presMod = marker.substring(1, comma);
                 } else {
-                    presMod = marker.substring(1);
+                    presMod = marker.length() > 0 ? marker.substring(1) : "";
                 }
                 if (presMod.length() == 1) {
                     def.presentation1 = presMod;
@@ -699,10 +730,11 @@ public class DateTimeUtils implements Serializable {
                         def.presentation1 = presMod;
                     }
                 } else {
-                    def.presentation1 = defaultPresentationModifiers.get(def.component);
+                    def.presentation1 = def.component == '\0' ? null : defaultPresentationModifiers.get(def.component);
                 }
                 if (def.presentation1 == null) {
-                    throw new RuntimeException(String.format(Constants.ERR_MSG_UNKNOWN_COMPONENT_SPECIFIER, def.component));
+                    // unknown component specifier
+                    throw new JException("D3132", -1, def.component == '\0' ? "" : String.valueOf(def.component));
                 }
                 if (def.presentation1.charAt(0) == 'n') {
                     def.names = tcase.LOWER;
@@ -712,34 +744,40 @@ public class DateTimeUtils implements Serializable {
                     } else {
                         def.names = tcase.UPPER;
                     }
-                } else if ("YMDdFWwXxHhmsf".indexOf(def.component) != -1) {
+                } else if (def.isComponent("YMDdFWwXxHhmsf")) {
                     String integerPattern = def.presentation1;
                     if (def.presentation2 != null) {
                         integerPattern += ";" + def.presentation2;
                     }
                     def.integerFormat = analyseIntegerPicture(integerPattern);
-                    def.integerFormat.ordinal = def.ordinal;
-                    if (def.width != null && def.width.getLeft() != null) {
-                        if (def.integerFormat.mandatoryDigits < def.width.getLeft()) {
-                            def.integerFormat.mandatoryDigits = def.width.getLeft();
+                    if (def.width && def.widthMin != null) {
+                        if (def.integerFormat.mandatoryDigits < def.widthMin) {
+                            def.integerFormat.mandatoryDigits = def.widthMin;
                         }
                     }
                     if (def.component == 'Y') {
+                        // §9.8.4.4
                         def.n = -1;
-                        if (def.width != null && def.width.getRight() != null) {
-                            def.n = def.width.getRight();
+                        if (def.width && def.widthMax != null) {
+                            def.n = def.widthMax;
                             def.integerFormat.mandatoryDigits = def.n;
                         } else {
-                            int w = def.integerFormat.mandatoryDigits + def.integerFormat.optionalDigits;
+                            double w = def.integerFormat.mandatoryDigits + def.integerFormat.optionalDigits;
                             if (w >= 2) {
                                 def.n = w;
                             }
                         }
                     }
+                    // if the previous part is also an integer with no intervening markup, then its width for parsing must be precisely defined
+                    if (!format.parts.isEmpty()) {
+                        SpecPart previousPart = format.parts.get(format.parts.size() - 1);
+                        if (previousPart.integerFormat != null) {
+                            previousPart.integerFormat.parseWidth = previousPart.integerFormat.mandatoryDigits;
+                        }
+                    }
                 }
                 if (def.component == 'Z' || def.component == 'z') {
                     def.integerFormat = analyseIntegerPicture(def.presentation1);
-                    def.integerFormat.ordinal = def.ordinal;
                 }
                 format.parts.add(def);
                 start = pos + 1;
@@ -750,11 +788,11 @@ public class DateTimeUtils implements Serializable {
         return format;
     }
 
-    private static Integer parseWidth(String wm) {
+    private static Double parseWidth(String wm) {
         if (wm == null || wm.equals("*")) {
             return null;
         } else {
-            return Integer.parseInt(wm);
+            return jsParseInt(wm);
         }
     }
 
@@ -764,6 +802,539 @@ public class DateTimeUtils implements Serializable {
     private static String[] months = {
         "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
     };
+
+    //
+    // JavaScript Date based components (port of jsonata-js getDateTimeFragment)
+    //
+
+    /** start of the first week of the given year / month (0-based) in millis, ISO 8601 / XPath F&amp;O */
+    private static double startOfFirstWeek(double year, double month) {
+        double jan1 = JsDate.utc(year, month);
+        double dayOfJan1 = JsDate.getUTCDay(jan1);
+        if (dayOfJan1 == 0) {
+            dayOfJan1 = 7;
+        }
+        // if Jan 1 is Fri, Sat or Sun, then add the number of days (in millis) to jan1 to get the start of week 1
+        return dayOfJan1 > 4 ? jan1 + (8 - dayOfJan1) * JsDate.MS_PER_DAY : jan1 - (dayOfJan1 - 1) * JsDate.MS_PER_DAY;
+    }
+
+    private static double deltaWeeks(double start, double end) {
+        return (end - start) / (JsDate.MS_PER_DAY * 7) + 1;
+    }
+
+    /** yearMonth(year, month).nextMonth() as {year, month} */
+    private static double[] nextMonth(double year, double month) {
+        return month == 11 ? new double[] {year + 1, 0} : new double[] {year, month + 1};
+    }
+
+    private static double[] previousMonth(double year, double month) {
+        return month == 0 ? new double[] {year - 1, 11} : new double[] {year, month - 1};
+    }
+
+    /**
+     * @param date a JavaScript time value (NaN = invalid date)
+     * @return Double, String or null (undefined)
+     */
+    private static Object getDateTimeFragment(double date, char component) {
+        switch (component) {
+            case 'Y': // year
+                return JsDate.getUTCFullYear(date);
+            case 'M': // month in year
+                return JsDate.getUTCMonth(date) + 1;
+            case 'D': // day in month
+                return JsDate.getUTCDate(date);
+            case 'd': { // day in year
+                double today = JsDate.utc(JsDate.getUTCFullYear(date), JsDate.getUTCMonth(date), JsDate.getUTCDate(date), 0, 0, 0, 0);
+                double firstJan = JsDate.utc(JsDate.getUTCFullYear(date), 0);
+                return (today - firstJan) / JsDate.MS_PER_DAY + 1;
+            }
+            case 'F': { // day of week
+                double v = JsDate.getUTCDay(date);
+                if (v == 0) {
+                    // ISO 8601 defines days 1-7: Mon-Sun
+                    v = 7;
+                }
+                return v;
+            }
+            case 'W': { // week in year
+                double year = JsDate.getUTCFullYear(date);
+                double startOfWeek1 = startOfFirstWeek(year, 0);
+                double today = JsDate.utc(year, JsDate.getUTCMonth(date), JsDate.getUTCDate(date), 0, 0, 0, 0);
+                double week = deltaWeeks(startOfWeek1, today);
+                if (week > 52) {
+                    // might be first week of the following year
+                    double startOfFollowingYear = startOfFirstWeek(year + 1, 0);
+                    if (today >= startOfFollowingYear) {
+                        week = 1;
+                    }
+                } else if (week < 1) {
+                    // must be end of the previous year
+                    double startOfPreviousYear = startOfFirstWeek(year - 1, 0);
+                    week = deltaWeeks(startOfPreviousYear, today);
+                }
+                return Math.floor(week);
+            }
+            case 'w': { // week in month
+                double year = JsDate.getUTCFullYear(date);
+                double month = JsDate.getUTCMonth(date);
+                double startOfWeek1 = startOfFirstWeek(year, month);
+                double today = JsDate.utc(year, month, JsDate.getUTCDate(date), 0, 0, 0, 0);
+                double week = deltaWeeks(startOfWeek1, today);
+                if (week > 4) {
+                    // might be first week of the following month
+                    double[] next = nextMonth(year, month);
+                    double startOfFollowingMonth = startOfFirstWeek(next[0], next[1]);
+                    if (today >= startOfFollowingMonth) {
+                        week = 1;
+                    }
+                } else if (week < 1) {
+                    // must be end of the previous month
+                    double[] prev = previousMonth(year, month);
+                    double startOfPreviousMonth = startOfFirstWeek(prev[0], prev[1]);
+                    week = deltaWeeks(startOfPreviousMonth, today);
+                }
+                return Math.floor(week);
+            }
+            case 'X': { // ISO week-numbering year
+                double year = JsDate.getUTCFullYear(date);
+                double startOfISOYear = startOfFirstWeek(year, 0);
+                double endOfISOYear = startOfFirstWeek(year + 1, 0);
+                if (date < startOfISOYear) {
+                    return year - 1;
+                } else if (date >= endOfISOYear) {
+                    return year + 1;
+                } else {
+                    return year;
+                }
+            }
+            case 'x': { // ISO week-numbering month
+                double year = JsDate.getUTCFullYear(date);
+                double month = JsDate.getUTCMonth(date);
+                double startOfISOMonth = startOfFirstWeek(year, month);
+                double[] next = nextMonth(year, month);
+                double endOfISOMonth = startOfFirstWeek(next[0], next[1]);
+                if (date < startOfISOMonth) {
+                    return previousMonth(year, month)[1] + 1;
+                } else if (date >= endOfISOMonth) {
+                    return next[1] + 1;
+                } else {
+                    return month + 1;
+                }
+            }
+            case 'H': // hour in day (24 hours)
+                return JsDate.getUTCHours(date);
+            case 'h': { // hour in half-day (12 hours)
+                double v = JsDate.getUTCHours(date) % 12;
+                if (v == 0) {
+                    v = 12;
+                }
+                return v;
+            }
+            case 'P': // am/pm marker
+                return JsDate.getUTCHours(date) >= 12 ? "pm" : "am";
+            case 'm': // minute in hour
+                return JsDate.getUTCMinutes(date);
+            case 's': // second in minute
+                return JsDate.getUTCSeconds(date);
+            case 'f': // fractional seconds
+                return JsDate.getUTCMilliseconds(date);
+            case 'C': // calendar name
+            case 'E': // era
+                return "ISO";
+            default:
+                // Z, z: since the date object is constructed from epoch millis, the TZ component is always be UTC.
+                return null;
+        }
+    }
+
+    //
+    // parsing
+    //
+
+    private static final class MatcherPart {
+
+        String regex;
+        char component;
+        /** null for literals; the function may return null (undefined) */
+        Function<String, Double> parse;
+
+        MatcherPart(String regex, Function<String, Double> parse) {
+            this.regex = regex;
+            this.parse = parse;
+        }
+    }
+
+    /** JavaScript order of the keys of the wordValues object of jsonata-js */
+    private static final Map<String, Double> wordValuesJs = new LinkedHashMap<>();
+    static {
+        for (int i = 0; i < few.length; i++)
+            wordValuesJs.put(few[i].toLowerCase(), (double) i);
+        for (int i = 0; i < ordinals.length; i++)
+            wordValuesJs.put(ordinals[i].toLowerCase(), (double) i);
+        for (int i = 0; i < decades.length; i++) {
+            String lword = decades[i].toLowerCase();
+            wordValuesJs.put(lword, (i + 2) * 10d);
+            wordValuesJs.put(lword.substring(0, decades[i].length() - 1) + "ieth", (i + 2) * 10d);
+        }
+        wordValuesJs.put("hundredth", 100d);
+        for (int i = 0; i < magnitudes.length; i++) {
+            String lword = magnitudes[i].toLowerCase();
+            double val = Math.pow(10, (i + 1) * 3);
+            wordValuesJs.put(lword, val);
+            wordValuesJs.put(lword + "th", val);
+        }
+    }
+
+    private static final Pattern WORD_SEPARATORS = JsRegex.compile(",\\s|\\sand\\s|[\\s\\\\-]", false, false);
+
+    /** jsonata-js wordsToNumber */
+    private static double wordsToNumberJs(String text) {
+        String[] parts = WORD_SEPARATORS.split(text, -1);
+        List<Double> segs = new ArrayList<>();
+        segs.add(0d);
+        for (String part : parts) {
+            Double value = wordValuesJs.get(part);
+            if (value != null && value < 100) {
+                double top = segs.remove(segs.size() - 1);
+                if (top >= 1000) {
+                    segs.add(top);
+                    top = 0;
+                }
+                segs.add(top + value);
+            } else {
+                double top = segs.remove(segs.size() - 1);
+                segs.add(top * (value == null ? Double.NaN : value));
+            }
+        }
+        double result = 0;
+        for (double d : segs)
+            result += d;
+        return result;
+    }
+
+    private static final Map<Character, Double> romanValuesJs = Map.of('M', 1000d, 'D', 500d, 'C', 100d, 'L', 50d, 'X', 10d, 'V', 5d, 'I', 1d);
+
+    /** jsonata-js romanToDecimal */
+    private static double romanToDecimalJs(String roman) {
+        double decimal = 0;
+        double max = 1;
+        for (int i = roman.length() - 1; i >= 0; i--) {
+            Double value = romanValuesJs.get(roman.charAt(i));
+            if (value == null)
+                return Double.NaN;
+            if (value < max) {
+                decimal -= value;
+            } else {
+                max = value;
+                decimal += value;
+            }
+        }
+        return decimal;
+    }
+
+    /** jsonata-js lettersToDecimal */
+    private static double lettersToDecimalJs(String letters, char aChar) {
+        double decimal = 0;
+        for (int i = 0; i < letters.length(); i++) {
+            decimal += (letters.charAt(letters.length() - i - 1) - aChar + 1) * Math.pow(26, i);
+        }
+        return decimal;
+    }
+
+    private static List<MatcherPart> generateRegex(PictureFormat formatSpec) {
+        List<MatcherPart> parts = new ArrayList<>();
+        for (final SpecPart part : formatSpec.parts) {
+            MatcherPart res;
+            if (part.type.equals("literal")) {
+                res = new MatcherPart(part.value.replaceAll("[.*+?^${}()|\\[\\]\\\\]", "\\\\$0"), null);
+            } else if (part.component == 'Z' || part.component == 'z') {
+                // timezone
+                final String separator = part.integerFormat.regular ? part.integerFormat.groupingSeparators.get(0).character : null;
+                String regex = "";
+                if (part.component == 'z') {
+                    regex = "GMT";
+                }
+                regex += "[-+][0-9]+";
+                if (separator != null) {
+                    regex += separator + "[0-9]+";
+                }
+                res = new MatcherPart(regex, value -> {
+                    if (part.component == 'z') {
+                        value = value.substring(3); // remove the leading GMT
+                    }
+                    double offsetHours = 0, offsetMinutes = 0;
+                    if (separator != null) {
+                        int idx = value.indexOf(separator);
+                        offsetHours = jsParseInt(jsSubstring(value, 0, idx));
+                        offsetMinutes = jsParseInt(jsSubstring(value, idx + 1, value.length()));
+                    } else {
+                        // depends on number of digits
+                        int numdigits = value.length() - 1;
+                        if (numdigits <= 2) {
+                            // just hour offset
+                            offsetHours = jsParseInt(value);
+                        } else {
+                            offsetHours = jsParseInt(value.substring(0, 3));
+                            offsetMinutes = jsParseInt(value.substring(3));
+                        }
+                    }
+                    // unlike jsonata-js, the minutes of a negative offset are negative as well (-05:30 = -330)
+                    if (value.startsWith("-"))
+                        offsetMinutes = -offsetMinutes;
+                    return offsetHours * 60 + offsetMinutes;
+                });
+            } else if (part.component == 'f') {
+                res = new MatcherPart("[0-9]+", value -> Double.parseDouble("0." + value.substring(0, Math.min(3, value.length()))) * 1000);
+            } else if (part.integerFormat != null) {
+                res = generateRegex(part.integerFormat);
+            } else {
+                // must be a month or day name
+                final Map<String, Double> lookup = new HashMap<>();
+                if (part.component == 'M' || part.component == 'x') {
+                    // months
+                    for (int i = 0; i < months.length; i++) {
+                        if (part.width && truthy(part.widthMax)) {
+                            lookup.put(jsSubstring(months[i], 0, part.widthMax), i + 1d);
+                        } else {
+                            lookup.put(months[i], i + 1d);
+                        }
+                    }
+                } else if (part.component == 'F') {
+                    // days
+                    for (int i = 1; i < days.length; i++) {
+                        if (part.width && truthy(part.widthMax)) {
+                            lookup.put(jsSubstring(days[i], 0, part.widthMax), (double) i);
+                        } else {
+                            lookup.put(days[i], (double) i);
+                        }
+                    }
+                } else if (part.component == 'P') {
+                    lookup.put("am", 0d);
+                    lookup.put("AM", 0d);
+                    lookup.put("pm", 1d);
+                    lookup.put("PM", 1d);
+                } else {
+                    // unsupported 'name' option for this component
+                    throw new JException("D3133", -1, String.valueOf(part.component));
+                }
+                res = new MatcherPart("[a-zA-Z]+", value -> lookup.get(value));
+            }
+            res.component = part.component;
+            parts.add(res);
+        }
+        return parts;
+    }
+
+    private static MatcherPart generateRegex(final Format formatSpec) {
+        final boolean isUpper = formatSpec.case_type == tcase.UPPER;
+        switch (formatSpec.primary) {
+            case LETTERS:
+                return new MatcherPart(isUpper ? "[A-Z]+" : "[a-z]+", value -> lettersToDecimalJs(value, isUpper ? 'A' : 'a'));
+            case ROMAN:
+                return new MatcherPart(isUpper ? "[MDCLXVI]+" : "[mdclxvi]+", value -> romanToDecimalJs(isUpper ? value : value.toUpperCase()));
+            case WORDS: {
+                List<String> alternatives = new ArrayList<>(wordValuesJs.keySet());
+                alternatives.add("and");
+                alternatives.add("[\\-, ]");
+                return new MatcherPart("(?:" + String.join("|", alternatives) + ")+", value -> wordsToNumberJs(value.toLowerCase()));
+            }
+            case DECIMAL: {
+                String regex = "[0-9]";
+                if (truthy(formatSpec.parseWidth)) {
+                    regex += "{" + Utils.jsNumberToString(formatSpec.parseWidth) + "}";
+                } else {
+                    regex += "+";
+                }
+                if (formatSpec.ordinal) {
+                    // ordinals
+                    regex += "(?:th|st|nd|rd)";
+                }
+                return new MatcherPart(regex, value -> {
+                    String digits = value;
+                    if (formatSpec.ordinal) {
+                        // strip off the suffix
+                        digits = value.substring(0, value.length() - 2);
+                    }
+                    // strip out the separators
+                    if (formatSpec.regular) {
+                        digits = digits.replace(",", "");
+                    } else {
+                        for (GroupingSeparator sep : formatSpec.groupingSeparators) {
+                            digits = digits.replace(sep.character, "");
+                        }
+                    }
+                    if (formatSpec.zeroCode != 0x30) {
+                        // apply offset
+                        StringBuilder b = new StringBuilder();
+                        for (int i = 0; i < digits.length(); i++) {
+                            int cp = digits.charAt(i) - formatSpec.zeroCode + 0x30;
+                            if (cp < 0 || cp > 0x10FFFF)
+                                throw jsError("Invalid code point " + cp);
+                            b.appendCodePoint(cp);
+                        }
+                        digits = b.toString();
+                    }
+                    return jsParseInt(digits);
+                });
+            }
+            case SEQUENCE:
+            default:
+                throw new JException("D3130", -1, formatSpec.token);
+        }
+    }
+
+    /**
+     * parse a string containing a timestamp as specified by the picture string (port of jsonata-js parseDateTime)
+     *
+     * @param now the timestamp of the evaluation (defaults for unspecified components)
+     * @return the millis since the epoch (Long, Double.NaN for an invalid date) or null if the timestamp does not
+     *         match the picture
+     */
+    public static Number parseDateTime(String timestamp, String picture, long now) {
+        PictureFormat formatSpec = analyseDateTimePicture(picture);
+        List<MatcherPart> matchSpec = generateRegex(formatSpec);
+        StringBuilder fullRegex = new StringBuilder("^");
+        for (MatcherPart part : matchSpec) {
+            fullRegex.append('(').append(part.regex).append(')');
+        }
+        fullRegex.append('$');
+        Pattern pattern = JsRegex.compile(fullRegex.toString(), true, false);
+        Matcher info = pattern.matcher(timestamp);
+        if (!info.find())
+            return null;
+
+        //    date mask             YXMxWwdD
+        final int dmA = 161; // binary 10100001
+        final int dmB = 130; // binary 10000010
+        final int dmC = 84; // binary 01010100
+        final int dmD = 72; // binary 01001000
+        //    time mask             PHhmsf
+        final int tmA = 23; // binary 010111
+        final int tmB = 47; // binary 101111
+
+        // value null = property present, but undefined
+        Map<Character, Double> components = new HashMap<>();
+        for (int i = 1; i <= info.groupCount() && i <= matchSpec.size(); i++) {
+            MatcherPart mpart = matchSpec.get(i - 1);
+            if (mpart.parse != null) {
+                components.put(mpart.component, mpart.parse.apply(info.group(i)));
+            }
+        }
+
+        if (components.isEmpty()) {
+            // nothing specified
+            return null;
+        }
+
+        int mask = 0;
+        for (char part : "YXMxWwdD".toCharArray()) {
+            mask <<= 1;
+            mask += truthy(components.get(part)) ? 1 : 0;
+        }
+        boolean dateA = isType(dmA, mask);
+        boolean dateB = !dateA && isType(dmB, mask);
+        boolean dateC = isType(dmC, mask);
+        boolean dateD = !dateC && isType(dmD, mask);
+
+        mask = 0;
+        for (char part : "PHhmsf".toCharArray()) {
+            mask <<= 1;
+            mask += truthy(components.get(part)) ? 1 : 0;
+        }
+        boolean timeA = isType(tmA, mask);
+        boolean timeB = !timeA && isType(tmB, mask);
+
+        // should only be zero or one date type and zero or one time type
+        String dateComps = dateB ? "YD" : dateC ? "XxwF" : dateD ? "XWF" : "YMD";
+        String timeComps = timeB ? "Phmsf" : "Hmsf";
+        String comps = dateComps + timeComps;
+
+        // step through the candidate parts from most significant to least significant
+        // default the most significant unspecified parts to current timestamp component
+        // default the least significant unspecified parts to zero
+        // if any gaps in between the specified parts, throw an error
+        boolean startSpecified = false;
+        boolean endSpecified = false;
+        for (char part : comps.toCharArray()) {
+            if (components.get(part) == null) {
+                if (startSpecified) {
+                    // past the specified block - default to zero
+                    components.put(part, "MDd".indexOf(part) != -1 ? 1d : 0d);
+                    endSpecified = true;
+                } else {
+                    // haven't hit the specified block yet, default to current timestamp
+                    Object v = getDateTimeFragment(now, part);
+                    components.put(part, v instanceof Double ? (Double) v : Double.NaN);
+                }
+            } else {
+                startSpecified = true;
+                if (endSpecified) {
+                    throw new JException("D3136", -1);
+                }
+            }
+        }
+
+        // validate and fill in components
+        Double month = components.get('M');
+        if (month != null && month > 0) {
+            components.put('M', month - 1); // Date.UTC requires a zero-indexed month
+        } else {
+            components.put('M', 0d); // default to January
+        }
+        if (dateB) {
+            // millis for given 1st Jan of that year (at 00:00 UTC)
+            double firstJan = JsDate.utc(num(components.get('Y')), 0);
+            double offsetMillis = (num(components.get('d')) - 1) * JsDate.MS_PER_DAY;
+            double derivedDate = JsDate.timeClip(firstJan + offsetMillis);
+            components.put('M', JsDate.getUTCMonth(derivedDate));
+            components.put('D', JsDate.getUTCDate(derivedDate));
+        }
+        if (dateC) {
+            // parsing this format not currently supported
+            throw new JException("D3136", -1);
+        }
+        if (dateD) {
+            // parsing this format (ISO week date) not currently supported
+            throw new JException("D3136", -1);
+        }
+        if (timeB) {
+            // 12hr to 24hr
+            double h = num(components.get('h'));
+            double hour = h == 12 ? 0 : h;
+            Double p = components.get('P');
+            if (p != null && p == 1) {
+                hour += 12;
+            }
+            components.put('H', hour);
+        }
+
+        double millis = JsDate.utc(num(components.get('Y')), num(components.get('M')), num(components.get('D')),
+            num(components.get('H')), num(components.get('m')), num(components.get('s')), num(components.get('f')));
+        Double tz = truthy(components.get('Z')) ? components.get('Z') : components.get('z');
+        if (truthy(tz)) {
+            // adjust for timezone
+            millis -= tz * 60 * 1000;
+        }
+        if (Double.isNaN(millis))
+            return Double.NaN;
+        if (millis == Math.rint(millis) && Math.abs(millis) < 9.007199254740992E15)
+            return (long) millis;
+        return millis;
+    }
+
+    /** ToNumber of a component (undefined = NaN) */
+    private static double num(Double d) {
+        return d == null ? Double.NaN : d;
+    }
+
+    private static boolean isType(int type, int mask) {
+        // shouldn't match any 0's, must match at least one 1
+        return ((~type & mask) == 0) && (type & mask) != 0;
+    }
+
+    //
+    // formatting
+    //
 
     private static PictureFormat iso8601Spec = null;
 
@@ -803,7 +1374,7 @@ public class DateTimeUtils implements Serializable {
     private static String formatComponent(LocalDateTime date, SpecPart markerSpec, int offsetHours, int offsetMinutes) {
         String componentValue = getDateTimeFragment(date, markerSpec.component);
 
-        if ("YMDdFWwXxHhms".indexOf(markerSpec.component) != -1) {
+        if (markerSpec.isComponent("YMDdFWwXxHhms")) {
             if (markerSpec.component == 'Y') {
                 if (markerSpec.n != -1) {
                     componentValue = "" + (int) (Integer.parseInt(componentValue) % Math.pow(10, markerSpec.n));
@@ -822,8 +1393,8 @@ public class DateTimeUtils implements Serializable {
                 } else if (markerSpec.names == tcase.LOWER) {
                     componentValue = componentValue.toLowerCase();
                 }
-                if (markerSpec.width != null && componentValue.length() > markerSpec.width.getRight()) {
-                    componentValue = componentValue.substring(0, markerSpec.width.getRight());
+                if (markerSpec.widthMax != null && componentValue.length() > markerSpec.widthMax) {
+                    componentValue = componentValue.substring(0, markerSpec.widthMax.intValue());
                 }
             } else {
                 componentValue = formatInteger(Integer.parseInt(componentValue), markerSpec.integerFormat);
@@ -835,7 +1406,7 @@ public class DateTimeUtils implements Serializable {
             if (markerSpec.integerFormat.regular) {
                 componentValue = formatInteger(offset, markerSpec.integerFormat);
             } else {
-                int numDigits = markerSpec.integerFormat.mandatoryDigits;
+                double numDigits = markerSpec.integerFormat.mandatoryDigits;
                 if (numDigits == 1 || numDigits == 2) {
                     componentValue = formatInteger(offsetHours, markerSpec.integerFormat);
                     if (offsetMinutes != 0) {
@@ -935,323 +1506,6 @@ public class DateTimeUtils implements Serializable {
         return componentValue;
     }
 
-    public static Long parseDateTime(String timestamp, String picture) {
-        PictureFormat formatSpec = analyseDateTimePicture(picture);
-        PictureMatcher matchSpec = generateRegex(formatSpec);
-        String fullRegex = "^";
-        for (MatcherPart part : matchSpec.parts) {
-            fullRegex += "(" + part.regex + ")";
-        }
-        fullRegex += "$";
-        Pattern pattern = Pattern.compile(fullRegex, Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(timestamp);
-        if (matcher.find()) {
-            int dmA = 161;
-            int dmB = 130;
-            int dmC = 84;
-            int dmD = 72;
-            int tmA = 23;
-            int tmB = 47;
-
-            Map<Character, Integer> components = new HashMap<>();
-            for (int i = 1; i <= matcher.groupCount(); i++) {
-                MatcherPart mpart = matchSpec.parts.get(i - 1);
-                try {
-                    components.put(mpart.component, mpart.parse(matcher.group(i)));
-                } catch (UnsupportedOperationException e) {
-                    //do nothing
-                }
-            }
-
-            if (components.size() == 0) {
-                // nothing specified
-                return null;
-            }
-
-            int mask = 0;
-
-            for (char part : "YXMxWwdD".toCharArray()) {
-                mask <<= 1;
-                if (components.get(part) != null) {
-                    mask += 1;
-                }
-            }
-            boolean dateA = isType(dmA, mask);
-            boolean dateB = !dateA && isType(dmB, mask);
-            boolean dateC = isType(dmC, mask);
-            boolean dateD = !dateC && isType(dmD, mask);
-
-            mask = 0;
-            for (char part : "PHhmsf".toCharArray()) {
-                mask <<= 1;
-                if (components.get(part) != null) {
-                    mask += 1;
-                }
-                ;
-            }
-
-            boolean timeA = isType(tmA, mask);
-            boolean timeB = !timeA && isType(tmB, mask);
-
-            String dateComps = dateB ? "YB" : dateC ? "XxwF" : dateD ? "XWF" : "YMD";
-            String timeComps = timeB ? "Phmsf" : "Hmsf";
-            String comps = dateComps + timeComps;
-
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-
-            boolean startSpecified = false;
-            boolean endSpecified = false;
-            for (char part : comps.toCharArray()) {
-                if (components.get(part) == null) {
-                    if (startSpecified) {
-                        components.put(part, "MDd".indexOf(part) != -1 ? 1 : 0);
-                        endSpecified = true;
-                    } else {
-                        components.put(part, Integer.parseInt(getDateTimeFragment(now, part)));
-                    }
-                } else {
-                    startSpecified = true;
-                    if (endSpecified) {
-                        throw new RuntimeException(Constants.ERR_MSG_MISSING_FORMAT);
-                    }
-                }
-            }
-            if (components.get('M') != null && components.get('M') > 0) {
-                components.put('M', components.get('M') - 1);
-            } else {
-                components.put('M', 0);
-            }
-            if (dateB) {
-                LocalDateTime firstJan = LocalDateTime.of(components.get('Y'), Month.JANUARY, 1, 0, 0);
-                firstJan = firstJan.withDayOfYear(components.get('d'));
-                components.put('M', firstJan.getMonthValue() - 1);
-                components.put('D', firstJan.getDayOfMonth());
-            }
-            if (dateC) {
-                //TODO implement this
-                //parsing this format not currently supported
-                throw new RuntimeException(Constants.ERR_MSG_MISSING_FORMAT);
-            }
-            if (dateD) {
-                //TODO implement this
-                // parsing this format (ISO week date) not currently supported
-                throw new RuntimeException(Constants.ERR_MSG_MISSING_FORMAT);
-            }
-            if (timeB) {
-                components.put('H', components.get('h') == 12 ? 0 : components.get('h'));
-                if (components.get('P') == 1) {
-                    components.put('H', components.get('H') + 12);
-                }
-            }
-            LocalDateTime cal = LocalDateTime.of(components.get('Y'), components.get('M') + 1, components.get('D'), components.get('H'), components.get('m'), components.get('s'),
-                components.get('f') * 1000000);
-            long millis = cal.toInstant(ZoneOffset.UTC).toEpochMilli();
-            if (components.get('Z') != null) {
-                millis -= components.get('Z') * 60 * 1000;
-            } else if (components.get('z') != null) {
-                millis -= components.get('z') * 60 * 1000;
-            }
-            return millis;
-        }
-        return null;
-    }
-
-    private static boolean isType(int type, int mask) {
-        return ((~type & mask) == 0) && (type & mask) != 0;
-    }
-
-    private static PictureMatcher generateRegex(PictureFormat formatSpec) {
-        PictureMatcher matcher = new PictureMatcher();
-        for (final SpecPart part : formatSpec.parts) {
-            MatcherPart res;
-            if (part.type.equals("literal")) {
-                Pattern p = Pattern.compile("[.*+?^${}()|\\[\\]\\\\]");
-                Matcher m = p.matcher(part.value);
-
-                String regex = m.replaceAll("\\\\$0");
-                res = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        throw new UnsupportedOperationException();
-                    }
-                };
-            } else if (part.component == 'Z' || part.component == 'z') {
-                final boolean separator = part.integerFormat.groupingSeparators.size() == 1 && part.integerFormat.regular;
-                String regex = "";
-                if (part.component == 'z') {
-                    regex = "GMT";
-                }
-                regex += "[-+][0-9]+";
-                if (separator) {
-                    regex += part.integerFormat.groupingSeparators.get(0).character + "[0-9]+";
-                }
-                res = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        if (part.component == 'z') {
-                            value = value.substring(3);
-                        }
-                        int offsetHours = 0, offsetMinutes = 0;
-                        if (separator) {
-                            offsetHours = Integer.parseInt(value.substring(0, value.indexOf(part.integerFormat.groupingSeparators.get(0).character)));
-                            offsetMinutes = Integer.parseInt(value.substring(value.indexOf(part.integerFormat.groupingSeparators.get(0).character) + 1));
-                        } else {
-                            int numdigits = value.length() - 1;
-                            if (numdigits <= 2) {
-                                offsetHours = Integer.parseInt(value);
-                            } else {
-                                offsetHours = Integer.parseInt(value.substring(0, 3));
-                                offsetMinutes = Integer.parseInt(value.substring(3));
-                            }
-                        }
-                        return offsetHours * 60 + offsetMinutes;
-                    }
-                };
-            } else if (part.component == 'f') {
-                res = new MatcherPart("[0-9]+") {
-                    public int parse(String value) {
-                        // return parseFloat('0.' + value.substring(0, 3)) * 1000;
-                        return Integer.parseInt(value.substring(0,3));
-                    }
-                };
-            } else if (part.integerFormat != null) {
-                res = generateRegex(part.component,part.integerFormat);
-            } else {
-                String regex = "[a-zA-Z]+";
-                final Map<String, Integer> lookup = new HashMap<>();
-                if (part.component == 'M' || part.component == 'x') {
-                    for (int i = 0; i < months.length; i++) {
-                        if (part.width != null && part.width.getRight() != null) {
-                            lookup.put(months[i].substring(0, part.width.getRight()), i + 1);
-                        } else {
-                            lookup.put(months[i], i + 1);
-                        }
-                    }
-                } else if (part.component == 'F') {
-                    for (int i = 1; i < days.length; i++) {
-                        if (part.width != null && part.width.getRight() != null) {
-                            lookup.put(days[i].substring(0, part.width.getRight()), i);
-                        } else {
-                            lookup.put(days[i], i);
-                        }
-                    }
-                } else if (part.component == 'P') {
-                    lookup.put("am", 0);
-                    lookup.put("AM", 0);
-                    lookup.put("pm", 1);
-                    lookup.put("PM", 1);
-                } else {
-                    throw new RuntimeException(String.format(Constants.ERR_MSG_INVALID_NAME_MODIFIER, part.component));
-                }
-                res = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        return lookup.get(value);
-                    }
-                };
-            }
-            res.component = part.component;
-            matcher.parts.add(res);
-        }
-        return matcher;
-    }
-
-    private static MatcherPart generateRegex(char component, Format formatSpec) {
-        MatcherPart matcher;
-        final boolean isUpper = formatSpec.case_type == tcase.UPPER;
-        switch (formatSpec.primary) {
-            case LETTERS: {
-                String regex = isUpper ? "[A-Z]+" : "[a-z]+";
-                matcher = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        return lettersToDecimal(value, isUpper ? 'A' : 'a');
-                    }
-                };
-                break;
-            }
-            case ROMAN: {
-                String regex = isUpper ? "[MDCLXVI]+" : "[mdclxvi]+";
-                matcher = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        return romanToDecimal(isUpper ? value : value.toUpperCase());
-                    }
-                };
-                break;
-            }
-            case WORDS: {
-                Set<String> words = new HashSet<>();
-                words.addAll(wordValues.keySet());
-                words.add("and");
-                words.add("[\\-, ]");
-                String regex = "(?:" + String.join("|", words.toArray(new String[words.size()])) + ")+";
-                matcher = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        return wordsToNumber(value.toLowerCase());
-                    }
-                };
-                break;
-            }
-            case DECIMAL: {
-                String regex = "[0-9]+";
-                switch(component) {
-                  case 'Y': {
-                    regex = "[0-9]{2,4}";
-                    break;
-                  }
-                  case 'M': //
-                  case 'D': //
-                  case 'H': //
-                  case 'h': //
-                  case 'm': //
-                  case 's': {
-                    regex = "[0-9]{1,2}";
-                    break;
-                  }
-                  default: {
-                    break;
-                  }
-                    
-                }
-                if (formatSpec.ordinal) {
-                    regex += "(?:th|st|nd|rd)";
-                }
-                matcher = new MatcherPart(regex) {
-
-                    public int parse(String value) {
-                        String digits = value;
-                        if (formatSpec.ordinal) {
-                            digits = value.substring(0, value.length() - 2);
-                        }
-                        if (formatSpec.regular) {
-                            digits = String.join("", digits.split(","));
-                        } else {
-                            for (GroupingSeparator sep : formatSpec.groupingSeparators) {
-                                digits = String.join("", digits.split(sep.character));
-                            }
-                        }
-                        if (formatSpec.zeroCode != 0x30) {
-                            char[] chars = digits.toCharArray();
-                            for (int i = 0; i < chars.length; i++) {
-                                chars[i] = (char) (chars[i] - formatSpec.zeroCode + 0x30);
-                            }
-                            digits = new String(chars);
-                        }
-                        return Integer.parseInt(digits);
-                    }
-                };
-                break;
-            }
-            case SEQUENCE:
-            default: {
-                throw new RuntimeException(Constants.ERR_MSG_SEQUENCE_UNSUPPORTED);
-            }
-        }
-        return matcher;
-    }
-
     public static int lettersToDecimal(String letters, char aChar) {
         int decimal = 0;
         char[] chars = letters.toCharArray();
@@ -1260,22 +1514,4 @@ public class DateTimeUtils implements Serializable {
         }
         return decimal;
     }
-
-    private static class PictureMatcher {
-
-        Vector<MatcherPart> parts = new Vector<>();
-    }
-
-    private static abstract class MatcherPart {
-
-        String regex;
-        char component;
-
-        public abstract int parse(String value);
-
-        public MatcherPart(String regex) {
-            this.regex = regex;
-        }
-    }
-
 }

@@ -2140,7 +2140,7 @@ public class Functions {
             }
             return jsTimeValue(JsDate.parse(timestamp));
         } else {
-            return DateTimeUtils.parseDateTime(timestamp, picture);
+            return DateTimeUtils.parseDateTime(timestamp, picture, Jsonata.current.get().timestamp);
         }
     }
 

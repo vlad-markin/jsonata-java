@@ -526,4 +526,42 @@ public class CompatJs222Test {
         assertEquals("D3110", err("$toMillis('+002018-02-01')"));
         assertEquals("D3110", err("$toMillis('2018-02-01 09:42:13')"));
     }
+
+    /** DT-02: $toMillis with picture is a port of jsonata-js parseDateTime. */
+    @Test
+    public void dt02_toMillisPicture() {
+        // fixed parse width for adjacent integer markers
+        assertEquals(1706745600000L, jsonata("$toMillis('1022024', '[D1][M01][Y0001]')").evaluate(null));
+        // fractional seconds with fewer digits than the picture
+        assertEquals(1775675104500L, jsonata("$toMillis('2026-04-08T19:05:04.5', '[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f1]')").evaluate(null));
+        assertEquals(1526947200000L, jsonata("$toMillis('twenty-second of May, 2018', '[Dwo] of [MNn], [Y]')").evaluate(null));
+        assertEquals(1526947200000L, jsonata("$toMillis('MMXVIII-v-xxii', '[YI]-[Mi]-[Di]')").evaluate(null));
+        assertEquals(1514937600000L, jsonata("$toMillis('2018-1st-3', '[Y]-[M1o]-[D]')").evaluate(null));
+        // two digit years are years of the 20th century (Date.UTC)
+        assertEquals(-1628812800000L, jsonata("$toMillis('18-05-22', '[Y01]-[M01]-[D01]')").evaluate(null));
+        assertEquals(1526947440000L, jsonata("$toMillis('2018-05-22 12:04 am', '[Y]-[M]-[D] [h]:[m] [P]')").evaluate(null));
+        assertEquals(1527001440000L, jsonata("$toMillis('2018-05-22 03:04 pm', '[Y]-[M]-[D] [h]:[m] [P]')").evaluate(null));
+        assertEquals(1526428800000L, jsonata("$toMillis('2018-136', '[Y]-[d]')").evaluate(null));
+        assertEquals(1526963400000L, jsonata("$toMillis('2018-05-22T10:00:00+05:30', '[Y]-[M]-[D]T[H]:[m]:[s][Z]')").evaluate(null));
+        // agreed exception (DT-05): the minutes of a negative offset are negative (jsonata-js: 1526985000000)
+        assertEquals(1526988600000L, jsonata("$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')").evaluate(null));
+        // out of range components roll over like Date.UTC
+        assertEquals(1548892800000L, jsonata("$toMillis('2018-13-31', '[Y]-[M]-[D]')").evaluate(null));
+        assertEquals(1514764800000L, jsonata("$toMillis('2018', '[Y,2-]')").evaluate(null));
+        assertEquals(null, jsonata("$toMillis('x', '[Y]')").evaluate(null));
+        assertEquals(null, jsonata("$toMillis('2018-05-22', '[Y]-[M]-[D]#')").evaluate(null));
+        assertEquals(null, jsonata("$toMillis('\u0661\u0662', '[Y\u0661]')").evaluate(null));
+        assertEquals("D3132", err("$toMillis('2018-05-22', '[Y]-[M]-[q]')"));
+        assertEquals("D3133", err("$toMillis('2018-05-22', '[YN]-[M]-[D]')"));
+        assertEquals("D3133", err("$toMillis('Thursday, 1 February 2018', '[E]')"));
+        assertEquals("D3135", err("$toMillis('2018-05-22', '[Y]-[M')"));
+        assertEquals("D3136", err("$toMillis('2018-22', '[Y]-[D]')"));
+        // names are looked up case sensitively, the month is then missing
+        assertEquals("D3136", err("$toMillis('2018 february 3', '[Y] [MNn] [D]')"));
+        assertEquals("D3136", err("$toMillis('2018-3-2-5', '[X]-[x]-[w]-[F1]')"));
+        assertEquals("D3136", err("$toMillis('2018-32-5', '[X]-[W]-[F1]')"));
+        assertEquals("D3130", err("$toMillis('x', '[Y#]')"));
+        // unspecified most significant components default to the evaluation timestamp
+        assertEquals(true, jsonata("$toMillis('18', '[F1]') = $millis()").evaluate(null));
+    }
 }
