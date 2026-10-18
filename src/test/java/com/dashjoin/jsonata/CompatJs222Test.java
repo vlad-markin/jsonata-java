@@ -564,4 +564,20 @@ public class CompatJs222Test {
         // unspecified most significant components default to the evaluation timestamp
         assertEquals(true, jsonata("$toMillis('18', '[F1]') = $millis()").evaluate(null));
     }
+
+    /** DT-03: $fromMillis ISO week-numbering year [X], week of month [w] and its month [x] like jsonata-js. */
+    @Test
+    public void dt03_fromMillisWeekComponents() {
+        assertEquals("2004-W53-6", jsonata("$fromMillis($toMillis('2005-01-01'), '[X0001]-W[W01]-[F1]')").evaluate(null));
+        assertEquals("2009-W01-1", jsonata("$fromMillis($toMillis('2008-12-29'), '[X0001]-W[W01]-[F1]')").evaluate(null));
+        assertEquals("Week: 5 of January", jsonata("$fromMillis(1359720000000, 'Week: [w] of [xNn]')").evaluate(null));
+        assertEquals("Week: 1 of August", jsonata("$fromMillis(1533038400000, 'Week: [w] of [xNn]')").evaluate(null));
+        assertEquals("Week: 1 of January", jsonata("$fromMillis(1419940800000, 'Week: [w] of [xNn]')").evaluate(null));
+        // Date.UTC maps the years 0..99 to 19xx
+        assertEquals("0-1-1", jsonata("$fromMillis(-62135596800000, '[X]-[W]-[d]')").evaluate(null));
+        assertEquals("-1-1--2", jsonata("$fromMillis(-62198755200000, '[Y]-[d]-[X]')").evaluate(null));
+        // fractional millis are truncated (TimeClip)
+        assertEquals("001", jsonata("$fromMillis(1.5, '[f001]')").evaluate(null));
+        assertEquals("1969-12-31T23:59:59.999", jsonata("$fromMillis(-1.5, '[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001]')").evaluate(null));
+    }
 }

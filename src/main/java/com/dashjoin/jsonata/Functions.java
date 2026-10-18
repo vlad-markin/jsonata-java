@@ -2180,7 +2180,7 @@ public class Functions {
             return null;
         }
 
-        return DateTimeUtils.formatDateTime(millis.longValue(), picture, timezone);
+        return DateTimeUtils.formatDateTime(millis.doubleValue(), picture, timezone);
     }
 
     /**

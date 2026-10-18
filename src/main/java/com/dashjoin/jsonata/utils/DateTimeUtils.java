@@ -43,11 +43,6 @@ package com.dashjoin.jsonata.utils;
 
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.temporal.IsoFields;
-import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -1338,17 +1333,30 @@ public class DateTimeUtils implements Serializable {
 
     private static PictureFormat iso8601Spec = null;
 
-    public static String formatDateTime(long millis, String picture, String timezone) {
-        int offsetHours = 0;
-        int offsetMinutes = 0;
+    /**
+     * formats the date/time as specified by the XPath fn:format-dateTime function (port of jsonata-js formatDateTime)
+     *
+     * @param millis the timestamp to be formatted, in millis since the epoch (a JavaScript number)
+     * @param picture the picture string that specifies the format
+     * @param timezone the timezone to use (+hhmm)
+     * @return the formatted timestamp
+     */
+    public static String formatDateTime(double millis, String picture, String timezone) {
+        double offsetHours = 0;
+        double offsetMinutes = 0;
 
         if (timezone != null) {
-            int offset = Integer.parseInt(timezone);
-            offsetHours = offset / 100;
+            // parse the hour and minute offsets
+            // assume for now the format supplied is +hhmm
+            double offset = Integer.parseInt(timezone);
+            // unlike jsonata-js (Math.floor), -0530 is -5 hours and -30 minutes
+            offsetHours = offset < 0 ? Math.ceil(offset / 100) : Math.floor(offset / 100);
             offsetMinutes = offset % 100;
         }
+
         PictureFormat formatSpec;
         if (picture == null) {
+            // default to ISO 8601 format
             if (iso8601Spec == null) {
                 iso8601Spec = analyseDateTimePicture("[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001][Z01:01t]");
             }
@@ -1357,153 +1365,102 @@ public class DateTimeUtils implements Serializable {
             formatSpec = analyseDateTimePicture(picture);
         }
 
-        int offsetMillis = (60 * offsetHours + offsetMinutes) * 60 * 1000;
-        LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(millis + offsetMillis), ZoneOffset.UTC);
-        String result = "";
+        double offsetMillis = (60 * offsetHours + offsetMinutes) * 60 * 1000;
+        double dateTime = JsDate.timeClip(millis + offsetMillis);
+
+        StringBuilder result = new StringBuilder();
         for (SpecPart part : formatSpec.parts) {
             if (part.type.equals("literal")) {
-                result += part.value;
+                result.append(part.value);
             } else {
-                result += formatComponent(dateTime, part, offsetHours, offsetMinutes);
+                result.append(formatComponent(dateTime, part, offsetHours, offsetMinutes));
             }
         }
 
-        return result;
+        return result.toString();
     }
 
-    private static String formatComponent(LocalDateTime date, SpecPart markerSpec, int offsetHours, int offsetMinutes) {
-        String componentValue = getDateTimeFragment(date, markerSpec.component);
+    /** months[index] / days[index] of JavaScript (null = undefined) */
+    private static String name(String[] names, double index) {
+        if (index >= 0 && index < names.length && index == Math.floor(index))
+            return names[(int) index];
+        return null;
+    }
 
+    private static String formatComponent(double date, SpecPart markerSpec, double offsetHours, double offsetMinutes) {
+        Object componentValue = getDateTimeFragment(date, markerSpec.component);
+
+        // §9.8.4.3 Formatting Integer-Valued Date/Time Components
         if (markerSpec.isComponent("YMDdFWwXxHhms")) {
+            double value = (Double) componentValue;
             if (markerSpec.component == 'Y') {
+                // §9.8.4.4 Formatting the Year Component
                 if (markerSpec.n != -1) {
-                    componentValue = "" + (int) (Integer.parseInt(componentValue) % Math.pow(10, markerSpec.n));
+                    value = value % Math.pow(10, markerSpec.n);
                 }
             }
             if (markerSpec.names != null) {
+                String name;
                 if (markerSpec.component == 'M' || markerSpec.component == 'x') {
-                    componentValue = months[Integer.parseInt(componentValue) - 1];
+                    name = name(months, value - 1);
                 } else if (markerSpec.component == 'F') {
-                    componentValue = days[Integer.parseInt(componentValue)];
+                    name = name(days, value);
                 } else {
                     throw new RuntimeException(String.format(Constants.ERR_MSG_INVALID_NAME_MODIFIER, markerSpec.component));
                 }
                 if (markerSpec.names == tcase.UPPER) {
-                    componentValue = componentValue.toUpperCase();
+                    name = name.toUpperCase();
                 } else if (markerSpec.names == tcase.LOWER) {
-                    componentValue = componentValue.toLowerCase();
+                    name = name.toLowerCase();
                 }
-                if (markerSpec.widthMax != null && componentValue.length() > markerSpec.widthMax) {
-                    componentValue = componentValue.substring(0, markerSpec.widthMax.intValue());
+                if (markerSpec.width && markerSpec.widthMax != null && name.length() > markerSpec.widthMax) {
+                    name = jsSubstring(name, 0, markerSpec.widthMax);
                 }
+                return name;
             } else {
-                componentValue = formatInteger(Integer.parseInt(componentValue), markerSpec.integerFormat);
+                return formatInteger(value, markerSpec.integerFormat);
             }
         } else if (markerSpec.component == 'f') {
-            componentValue = formatInteger(Integer.parseInt(componentValue), markerSpec.integerFormat);
+            // TODO §9.8.4.5 Formatting Fractional Seconds
+            return formatInteger((Double) componentValue, markerSpec.integerFormat);
         } else if (markerSpec.component == 'Z' || markerSpec.component == 'z') {
-            int offset = offsetHours * 100 + offsetMinutes;
+            // §9.8.4.6 Formatting timezones
+            double offset = offsetHours * 100 + offsetMinutes;
+            String tz;
             if (markerSpec.integerFormat.regular) {
-                componentValue = formatInteger(offset, markerSpec.integerFormat);
+                tz = formatInteger(offset, markerSpec.integerFormat);
             } else {
                 double numDigits = markerSpec.integerFormat.mandatoryDigits;
                 if (numDigits == 1 || numDigits == 2) {
-                    componentValue = formatInteger(offsetHours, markerSpec.integerFormat);
+                    tz = formatInteger(offsetHours, markerSpec.integerFormat);
                     if (offsetMinutes != 0) {
-                        componentValue += ":" + formatInteger(offsetMinutes, "00");
+                        tz += ":" + formatInteger(offsetMinutes, "00");
                     }
                 } else if (numDigits == 3 || numDigits == 4) {
-                    componentValue = formatInteger(offset, markerSpec.integerFormat);
+                    tz = formatInteger(offset, markerSpec.integerFormat);
                 } else {
                     throw new RuntimeException(Constants.ERR_MSG_TIMEZONE_FORMAT);
                 }
             }
             if (offset >= 0) {
-                componentValue = "+" + componentValue;
+                tz = "+" + tz;
             }
             if (markerSpec.component == 'z') {
-                componentValue = "GMT" + componentValue;
+                tz = "GMT" + tz;
             }
             if (offset == 0 && markerSpec.presentation2 != null && markerSpec.presentation2 == 't') {
-                componentValue = "Z";
+                tz = "Z";
             }
+            return tz;
         } else if (markerSpec.component == 'P') {
             // §9.8.4.7 Formatting Other Components
             // Formatting P for am/pm
             // getDateTimeFragment() always returns am/pm lower case so check for UPPER here
             if (markerSpec.names == tcase.UPPER) {
-                componentValue = componentValue.toUpperCase();
+                return ((String) componentValue).toUpperCase();
             }
         }
-        return componentValue;
-    }
-
-    private static String getDateTimeFragment(LocalDateTime date, Character component) {
-        String componentValue = "";
-        switch (component) {
-            case 'Y': // year
-                componentValue = "" + date.getYear();
-                break;
-            case 'M': // month in year
-                componentValue = "" + date.getMonthValue();
-                break;
-            case 'D': // day in month
-                componentValue = "" + date.getDayOfMonth();
-                break;
-            case 'd': // day in year
-                componentValue = "" + date.getDayOfYear();
-                break;
-            case 'F': // day of week
-                componentValue = "" + date.getDayOfWeek().getValue();
-                break;
-            case 'W': // week in year
-                componentValue = "" + date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-                break;
-            case 'w': // week in month
-                componentValue = "" + date.get(WeekFields.ISO.weekOfMonth());
-                break;
-            case 'X':
-                //TODO work these out once others verified
-                componentValue = "" + date.getYear();
-                break;
-            case 'x':
-                componentValue = "" + date.getMonthValue();
-                break;
-            case 'H': // hour in day (24 hours)
-                componentValue = "" + date.getHour();
-                break;
-            case 'h': //hour in day (12 hours)
-                int hour = date.getHour();
-                if (hour > 12) {
-                    hour -= 12;
-                } else if (hour == 0) {
-                    hour = 12;
-                }
-                componentValue = "" + hour;
-                break;
-            case 'P':
-                componentValue = date.getHour() < 12 ? "am" : "pm";
-                break;
-            case 'm':
-                componentValue = "" + date.getMinute();
-                break;
-            case 's':
-                componentValue = "" + date.getSecond();
-                break;
-            case 'f':
-                componentValue = "" + (date.getNano() / 1000000);
-                break;
-            case 'Z':
-            case 'z':
-                break;
-            case 'C':
-                componentValue = "ISO";
-                break;
-            case 'E':
-                componentValue = "ISO";
-                break;
-        }
-        return componentValue;
+        return componentValue == null ? "undefined" : (String) componentValue;
     }
 
     public static int lettersToDecimal(String letters, char aChar) {
