@@ -1,0 +1,8 @@
+(
+  $rate := 1.2;
+  $total := function($p) { $p.Price * $p.Quantity * $rate };
+  Account.Order.{
+    "id": OrderID,
+    "sum": $sum(Product.$total($))
+  }
+)

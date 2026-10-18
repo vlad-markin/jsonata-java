@@ -1,0 +1,16 @@
+b 5:11
+b 3:37 if $p.Price > 5
+bl
+r
+c
+bt
+vars
+p $p.Name & ": " & $p.Price * $p.Quantity
+n
+o
+o
+c
+d 1
+c
+bt
+c
