@@ -206,4 +206,14 @@ public class CompatJs222Test {
         assertEquals("D3140", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
                 () -> jsonata("$encodeUrlComponent('\ud800')").evaluate(null)).getError());
     }
+
+    /** PART-01: only '?' placeholders are parameters of a partially applied function. */
+    @Test
+    public void part01_partialApplicationPlaceholders() {
+        assertEquals(List.of("", ""), jsonata("$map(['a','b'], $substring(?, 1))").evaluate(null));
+        assertEquals("bc", jsonata("($f := $substring(?, 1); $f('abc', 5))").evaluate(null));
+        assertEquals(List.of(List.of(1, 2), List.of(2, 2)),
+                jsonata("($p := function($a,$b,$c){[$a,$b,$c]}(?, 2); $map([1,2], $p))").evaluate(null));
+        assertEquals("a", jsonata("$substring(?, 0, ?)('abc', 1)").evaluate(null));
+    }
 }

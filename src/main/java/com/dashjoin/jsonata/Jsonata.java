@@ -1908,7 +1908,8 @@ public class Jsonata {
         var evaluatedArgs = new ArrayList<>();
         for(var ii = 0; ii < expr.arguments.size(); ii++) {
             var arg = expr.arguments.get(ii);
-            if (arg.type.equals("operator") && (arg.value.equals("?"))) {
+            // note: the value of the '?' token is a Character
+            if (arg.type.equals("operator") && ("?".equals(String.valueOf(arg.value)))) {
                 evaluatedArgs.add(arg);
             } else {
                 evaluatedArgs.add(/* await */ evaluate(arg, input, environment));
@@ -1997,7 +1998,10 @@ public class Jsonata {
         for (var param : proc.arguments) {
 //         proc.arguments.forEach(Object (param, index) {
             Object arg = index<args.size() ? args.get(index) : null;
-            if ((arg==null) || (arg instanceof Symbol && ("operator".equals(((Symbol)arg).type) && "?".equals(((Symbol)arg).value)))) {
+
+            // jsonata-js: only '?' placeholders stay unbound; missing or undefined arguments are
+            // bound as undefined (otherwise the partial function takes extra parameters)
+            if (arg instanceof Symbol && ("operator".equals(((Symbol)arg).type) && "?".equals(String.valueOf(((Symbol)arg).value)))) {
                 unboundArgs.add(param);
             } else {
                 env.bind((String)param.value, arg);
@@ -2049,7 +2053,6 @@ public class Jsonata {
         //      return "$" + sigArg;
         //  }).toList();
         //  var body = "function(" + String.join(", ", sigArgs) + "){ _ }";
-
         var bodyAST = parser.parse(body);
         //bodyAST.body = _native;
 
