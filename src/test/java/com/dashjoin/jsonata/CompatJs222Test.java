@@ -75,4 +75,13 @@ public class CompatJs222Test {
         assertEquals(false, jsonata("{'a':1} in [{'a':1}]").evaluate(null));
         assertEquals(true, jsonata("($o := {'a':1}; $o in [$o])").evaluate(null));
     }
+
+    /** SEQ-01: $distinct of an array (not a sequence) keeps the array even with one distinct value. */
+    @Test
+    public void seq01_distinctKeepsArray() {
+        assertEquals(List.of(1), jsonata("$distinct([1, 1])").evaluate(null));
+        Map<String, Object> in = new LinkedHashMap<>();
+        in.put("a", List.of(Map.of("b", 1), Map.of("b", 1)));
+        assertEquals(1, jsonata("$distinct(a.b)").evaluate(in));
+    }
 }

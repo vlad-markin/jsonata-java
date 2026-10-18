@@ -2033,7 +2033,7 @@ public class Functions {
         }
         List arr = (List)_arr;
 
-        var results = (arr instanceof JList/*sequence*/) ? createSequence() : new ArrayList<>();
+        var results = Utils.isSequence(arr) ? createSequence() : new ArrayList<>();
 
         // keep the first occurrence of deep-equal values (jsonata-js deepEquals: numbers are
         // compared by value regardless of Java type); normalized keys keep this O(n)
