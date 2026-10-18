@@ -28,13 +28,6 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -49,7 +42,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.regex.MatchResult;
@@ -64,6 +56,8 @@ import com.dashjoin.jsonata.utils.Constants;
 import com.dashjoin.jsonata.utils.DateTimeUtils;
 import com.dashjoin.jsonata.utils.FormatInteger;
 import com.dashjoin.jsonata.utils.FormatNumber;
+import com.dashjoin.jsonata.utils.JsDate;
+import com.dashjoin.jsonata.utils.JsRegex;
 import com.dashjoin.jsonata.utils.UriCodec;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -2134,41 +2128,31 @@ public class Functions {
      * @throws ParseException 
      * @returns {Number} - milliseconds since the epoch
      */
-    public static Long dateTimeToMillis(String timestamp, String picture) throws ParseException {
+    public static Number dateTimeToMillis(String timestamp, String picture) throws ParseException {
         // undefined inputs always return undefined
         if(timestamp == null) {
             return null;
         }
 
         if(picture == null) {
-          if (/*StringUtils.*/isNumeric(timestamp)) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy");
-            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-            return sdf.parse(timestamp).getTime();
-          }
-          try {
-            int len = timestamp.length();
-            if (len > 5)
-              if (timestamp.charAt(len-5) == '+' || timestamp.charAt(len-5) == '-')
-                if (Character.isDigit(timestamp.charAt(len-4)) && Character.isDigit(timestamp.charAt(len-3)) && Character.isDigit(timestamp.charAt(len-2)) && Character.isDigit(timestamp.charAt(len-1)) )
-                  timestamp = timestamp.substring(0, len-2) + ':' + timestamp.substring(len-2, len);
-            return OffsetDateTime.parse(timestamp).toInstant().toEpochMilli();
-          }
-          catch (RuntimeException e) {
-            try {
-              LocalDate ldt = LocalDate.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-              return ldt.atStartOfDay().atZone(ZoneId.of("UTC")).toInstant().toEpochMilli();
+            if (!ISO8601_REGEX.matcher(timestamp).matches()) {
+                throw new JException("D3110", -1, timestamp);
             }
-            catch (DateTimeParseException noZone) {
-              // Implementations usually default to the local time zone when the date string is non-standard
-              // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse#non-standard_date_strings
-              return LocalDateTime.parse(timestamp).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-            }
-          }
+            return jsTimeValue(JsDate.parse(timestamp));
         } else {
             return DateTimeUtils.parseDateTime(timestamp, picture);
         }
     }
+
+    /** Regular expression of jsonata-js 2.2.2 to match an ISO 8601 formatted timestamp */
+    private static final Pattern ISO8601_REGEX = JsRegex.compile(
+        "^\\d{4}(-[01]\\d)?(-[0-3]\\d)?(T[0-2]\\d:[0-5]\\d:[0-5]\\d)?(\\.\\d+)?([+-][0-2]\\d:?[0-5]\\d|Z)?$", false, false);
+
+    /** JavaScript time value (integral double or NaN) as JSONata number */
+    static Number jsTimeValue(double t) {
+        return Double.isNaN(t) ? (Number) Double.NaN : (Number) (long) t;
+    }
+
     // Adapted from: org.apache.commons.lang3.StringUtils
     public static boolean isNumeric(final CharSequence cs) {
         if (cs == null || cs.length() == 0) {

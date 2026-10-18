@@ -503,4 +503,27 @@ public class CompatJs222Test {
         JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("[1..2.5]").evaluate(null));
         assertEquals(4, e.getLocation());
     }
+
+    /** DT-01: $toMillis without picture accepts exactly the jsonata-js ISO 8601 subset (Date.parse semantics). */
+    @Test
+    public void dt01_toMillisIso8601() {
+        assertEquals(1514764800000L, jsonata("$toMillis('2018')").evaluate(null));
+        assertEquals(1517443200000L, jsonata("$toMillis('2018-02')").evaluate(null));
+        // day overflow rolls over like Date.parse
+        assertEquals(1519948800000L, jsonata("$toMillis('2018-02-30')").evaluate(null));
+        assertEquals(1517529600000L, jsonata("$toMillis('2018-02-01T24:00:00Z')").evaluate(null));
+        assertEquals(1517479200123L, jsonata("$toMillis('2018-02-01T10:00:00.12345678Z')").evaluate(null));
+        assertEquals(1517475600000L, jsonata("$toMillis('2018-02-01T10:00:00+0100')").evaluate(null));
+        assertEquals(1517392860000L, jsonata("$toMillis('2018-02-01T10:00:00+23:59')").evaluate(null));
+        // matches the regex, but Date.parse yields NaN
+        Object nan = jsonata("$toMillis('2018-13-01')").evaluate(null);
+        assertEquals(Double.NaN, nan);
+        assertEquals("D3001", err("$string($toMillis('2018-13-01'))"));
+        assertEquals("[null]", jsonata("$string([$toMillis('2018-13-01')])").evaluate(null));
+        assertEquals("D3110", err("$toMillis('20180201')"));
+        assertEquals("D3110", err("$toMillis('foo')"));
+        assertEquals("D3110", err("$toMillis('2018-02-01T09:42')"));
+        assertEquals("D3110", err("$toMillis('+002018-02-01')"));
+        assertEquals("D3110", err("$toMillis('2018-02-01 09:42:13')"));
+    }
 }
