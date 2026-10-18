@@ -2127,6 +2127,13 @@ public class Functions {
             arg2 = new JList<>(Arrays.asList(arg2));
         }
 
+        // guardrail: maximum sequence length (jsonata-js 2.2, 91532d4)
+        int size = ((List)arg1).size() + ((List)arg2).size();
+        Jsonata.Options options = currentOptions();
+        if (options != null && options.sequence != null && size > options.sequence) {
+            throw new JException("D2015", -1, size);
+        }
+
         // Shortcut:
         if (((List)arg1).isEmpty() && (arg2 instanceof Utils.RangeList))
             return arg2;
@@ -2462,6 +2469,14 @@ public class Functions {
      * Creates a new sequence with guardrails of the current environment
      * @return
      */
+    /** guardrail options of the current evaluation, or null */
+    static Jsonata.Options currentOptions() {
+        Jsonata j = Jsonata.current.get();
+        if (j == null || j.environment == null || j.environment.base == null)
+            return null;
+        return j.environment.base.options;
+    }
+
     public static List<Object> createSequence() {
         return Jsonata.current.get().environment.base.createSequence();
     }

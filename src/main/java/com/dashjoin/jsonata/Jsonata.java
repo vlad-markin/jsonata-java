@@ -1259,7 +1259,7 @@ public class Jsonata {
                 size
             );
         }
-        if(environment.base.options!=null && size > environment.base.options.sequence) {
+        if(environment.base.options!=null && environment.base.options.sequence!=null && size > environment.base.options.sequence) {
             throw new JException("D2015",
                 -1,
                 size

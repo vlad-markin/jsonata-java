@@ -291,4 +291,17 @@ public class CompatJs222Test {
         e2.registerFunction("echo", new Jsonata.JFunction((input, args) -> args.get(0), null));
         assertEquals(List.of("a", "b"), e2.evaluate(null));
     }
+
+    /** API-04: guardrail options (jsonata-js 2.2): timeout/stack without sequence, sequence limit in $append and wildcards. */
+    @Test
+    public void api04_guardrails() {
+        assertEquals(List.of(1, 2, 3, 4, 5), jsonata("[1..5]", Jsonata.Options.builder().timeout(1000L).build()).evaluate(null));
+        assertEquals(List.of(1, 2, 3, 4, 5), jsonata("[1..5]", Jsonata.Options.builder().stack(100).build()).evaluate(null));
+        Jsonata.Options seq = Jsonata.Options.builder().sequence(5).build();
+        assertEquals("D2015", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$append([1,2,3],[4,5,6])", seq).evaluate(null)).getError());
+        Jsonata.Options seq3 = Jsonata.Options.builder().sequence(3).build();
+        assertEquals("D2015", org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("{'a':[1,2],'b':[3,4]}.*", seq3).evaluate(null)).getError());
+    }
 }
