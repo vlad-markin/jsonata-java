@@ -325,6 +325,28 @@ public class ControlProbes {
             return null;
         });
 
+        probe("B6 expression can switch off setRuntimeBounds", () -> {
+            String ex = "($__evaluate_entry := $undefinedVar; $__evaluate_exit := $undefinedVar; " + String.format(LOOP, N) + ")";
+            Jsonata e = jsonata(ex);
+            Frame f = e.createFrame();
+            f.setRuntimeBounds(100, 1000);
+            long t0 = System.nanoTime();
+            Throwable got = null;
+            Object r = null;
+            try { r = e.evaluate(null, f); } catch (Throwable t) { got = t; }
+            long took = ms(t0);
+            Jsonata e2 = jsonata(ex, Options.builder().timeout(100L).stack(100000).sequence(100_000_000).build());
+            Throwable got2 = null;
+            try { e2.evaluate(null); } catch (Throwable t) { got2 = t; }
+            Throwable got3 = null;
+            try { jsonata("($__evaluate_entry := 1; 2)").evaluate(null, jsonata("1").createFrame()); } catch (Throwable t) { got3 = t; }
+            report("B6b `$__evaluate_entry := 1` in an expression", got3 instanceof ClassCastException ? "CRASH (non-JException)" : "ok", describe(got3));
+            report("B6 expression can switch off setRuntimeBounds", got == null || took > 500 ? "CONFIRMED (bypass)" : "not reproduced",
+                    "bounds(100ms) + `$__evaluate_entry := $undefinedVar; ...loop`: the whole loop ran unchecked, ended after " + took + "ms, result=" + r + ", error=" + describe(got)
+                            + " (callbacks are ordinary string-named bindings; JS uses Symbol.for keys). Options.timeout on the same expr: " + describe(got2));
+            return null;
+        });
+
         // ---------------------------------------------------------------- memory budget
         probe("M1 no output/string size budget", () -> {
             Options o = Options.builder().timeout(30000L).stack(1000).sequence(1000).build();
