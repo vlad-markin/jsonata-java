@@ -1348,7 +1348,8 @@ public class DateTimeUtils implements Serializable {
         if (timezone != null) {
             // parse the hour and minute offsets
             // assume for now the format supplied is +hhmm
-            double offset = Integer.parseInt(timezone);
+            // JavaScript parseInt: 'Z' or 'EST' yield NaN (an invalid date), '+01:00' is +0001
+            double offset = jsParseInt(timezone);
             // unlike jsonata-js (Math.floor), -0530 is -5 hours and -30 minutes
             offsetHours = offset < 0 ? Math.ceil(offset / 100) : Math.floor(offset / 100);
             offsetMinutes = offset % 100;
@@ -1406,8 +1407,11 @@ public class DateTimeUtils implements Serializable {
                 } else if (markerSpec.component == 'F') {
                     name = name(days, value);
                 } else {
-                    throw new RuntimeException(String.format(Constants.ERR_MSG_INVALID_NAME_MODIFIER, markerSpec.component));
+                    throw new JException("D3133", -1, String.valueOf(markerSpec.component));
                 }
+                if (name == null && (markerSpec.names != tcase.TITLE || markerSpec.width))
+                    // undefined.toUpperCase() / undefined.length in jsonata-js (invalid date)
+                    throw jsError("Cannot read properties of undefined");
                 if (markerSpec.names == tcase.UPPER) {
                     name = name.toUpperCase();
                 } else if (markerSpec.names == tcase.LOWER) {
@@ -1416,12 +1420,15 @@ public class DateTimeUtils implements Serializable {
                 if (markerSpec.width && markerSpec.widthMax != null && name.length() > markerSpec.widthMax) {
                     name = jsSubstring(name, 0, markerSpec.widthMax);
                 }
-                return name;
+                return name == null ? "undefined" : name;
             } else {
                 return formatInteger(value, markerSpec.integerFormat);
             }
         } else if (markerSpec.component == 'f') {
             // TODO §9.8.4.5 Formatting Fractional Seconds
+            if (markerSpec.integerFormat == null)
+                // [fN]: _formatInteger(value, undefined) in jsonata-js
+                throw jsError("Cannot read properties of undefined (reading 'primary')");
             return formatInteger((Double) componentValue, markerSpec.integerFormat);
         } else if (markerSpec.component == 'Z' || markerSpec.component == 'z') {
             // §9.8.4.6 Formatting timezones
@@ -1432,14 +1439,15 @@ public class DateTimeUtils implements Serializable {
             } else {
                 double numDigits = markerSpec.integerFormat.mandatoryDigits;
                 if (numDigits == 1 || numDigits == 2) {
-                    tz = formatInteger(offsetHours, markerSpec.integerFormat);
+                    // unlike jsonata-js, -0030 is -00:30 (not -01:-30)
+                    tz = (offset < 0 ? "-" : "") + formatInteger(Math.abs(offsetHours), markerSpec.integerFormat);
                     if (offsetMinutes != 0) {
-                        tz += ":" + formatInteger(offsetMinutes, "00");
+                        tz += ":" + formatInteger(Math.abs(offsetMinutes), "00");
                     }
                 } else if (numDigits == 3 || numDigits == 4) {
                     tz = formatInteger(offset, markerSpec.integerFormat);
                 } else {
-                    throw new RuntimeException(Constants.ERR_MSG_TIMEZONE_FORMAT);
+                    throw new JException("D3134", -1, numDigits);
                 }
             }
             if (offset >= 0) {

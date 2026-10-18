@@ -580,4 +580,37 @@ public class CompatJs222Test {
         assertEquals("001", jsonata("$fromMillis(1.5, '[f001]')").evaluate(null));
         assertEquals("1969-12-31T23:59:59.999", jsonata("$fromMillis(-1.5, '[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01].[f001]')").evaluate(null));
     }
+
+    /** DT-04: $fromMillis/$now picture errors are JExceptions, the timezone is read with JavaScript parseInt. */
+    @Test
+    public void dt04_fromMillisErrorsAndTimezone() {
+        assertEquals("D3133", err("$fromMillis(0, '[YN]-[M]-[D]')"));
+        assertEquals("D3134", err("$now('[ZN]')"));
+        assertEquals("D3134", err("$fromMillis(0, '[Z010101t]')"));
+        assertEquals("D3135", err("$fromMillis(0, '[Y]-[M')"));
+        assertEquals("D3135", err("$fromMillis(0, '[Y]-[')"));
+        assertEquals("D3132", err("$fromMillis(0, '[]')"));
+        assertEquals("D3131", err("$fromMillis(0, '[Y0\u0661]')"));
+        assertEquals("D3130", err("$fromMillis(0, '[Y#]')"));
+        // timezones that are not +hhmm: NaN (invalid date) or the leading digits
+        assertEquals("NaN", jsonata("$fromMillis(0, '[Y]', 'Z')").evaluate(null));
+        assertEquals("NaN", jsonata("$now('[Y]', 'Z')").evaluate(null));
+        assertEquals("0NaN-NaN-NaN NaN:NaN am 0N:aN",
+            jsonata("$fromMillis(0, '[Y0001]-[M01]-[D01] [h]:[m01] [P] [Z]', 'EST')").evaluate(null));
+        assertEquals("undefined undefined", jsonata("$fromMillis(0, '[FNn] [MNn]', 'Z')").evaluate(null));
+        assertEquals("0", jsonata("$fromMillis(0, '[H]', '+01:00')").evaluate(null));
+        assertEquals("1:30 +01:30", jsonata("$fromMillis(0, '[H]:[m] [Z]', ' +0130')").evaluate(null));
+        assertEquals("0:16 +00:16", jsonata("$fromMillis(0, '[H]:[m] [Z]', '0x10')").evaluate(null));
+        assertEquals("19:00 -05", jsonata("$fromMillis(0, '[H01]:[m01] [Z01]', '-0500')").evaluate(null));
+        assertEquals("00:00 +0", jsonata("$fromMillis(0, '[H01]:[m01] [Z0]', '-0000')").evaluate(null));
+        assertEquals("NaN", jsonata("$fromMillis(1e17, '[Y]')").evaluate(null));
+        assertEquals("+1:e+:23", jsonata("$fromMillis(0, '[Z]', '99999999999999999999999')").evaluate(null));
+        // unknown component with a presentation modifier, width modifiers
+        assertEquals("undefined", jsonata("$fromMillis(0, '[q1]')").evaluate(null));
+        assertEquals("January", jsonata("$fromMillis(0, '[MNn,3]')").evaluate(null));
+        assertEquals("Ja|70|70|001", jsonata("$fromMillis(0, '[MNn,2-2]|[Y,2]|[Y,*-2]|[D,3-]')").evaluate(null));
+        // agreed exception (DT-05): negative offsets with minutes are correct (jsonata-js: "17:30 -06:30", "-01:-30")
+        assertEquals("18:30 -05:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z]', '-0530')").evaluate(null));
+        assertEquals("23:30 -00:30", jsonata("$fromMillis(0, '[H01]:[m01] [Z01]', '-0030')").evaluate(null));
+    }
 }
