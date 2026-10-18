@@ -5,4 +5,5 @@ module com.dashjoin.jsonata {
     exports com.dashjoin.jsonata;
     exports com.dashjoin.jsonata.json;
     exports com.dashjoin.jsonata.utils;
+    exports com.dashjoin.jsonata.debug;
 }

@@ -87,6 +87,8 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
     String path;
     int position = 0;
     int length; // = path.length;
+    // debug-api: start offset of the token currently being scanned (inclusive)
+    int tokenStart = 0;
 
     Tokenizer(String path) {
         this.path = path;
@@ -97,6 +99,8 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
         String type;
         Object value;
         int position;
+        // debug-api: start offset of the token (inclusive); position is the end offset (exclusive)
+        int start;
         //
         String id;
     }
@@ -104,6 +108,7 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
     Token create(String type, Object value) {
         Token t = new Token();
         t.type = type; t.value = value; t.position = position;
+        t.start = tokenStart; // debug-api
         return t;
     }
 
@@ -200,6 +205,7 @@ static HashMap<String, String> escapes = new HashMap<String, String>() {{
             currentChar = path.charAt(position);
             return next(prefix); // need this to swallow any following whitespace
         }
+        tokenStart = position; // debug-api: remember where the token starts
         // test for regex
         if (prefix != true && currentChar == '/') {
             position++;

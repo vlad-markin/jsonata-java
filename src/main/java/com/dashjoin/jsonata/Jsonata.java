@@ -119,6 +119,26 @@ public class Jsonata {
             bind("__evaluate_exit", cb);
         }
 
+        // debug-api ---------------------------------------------------------
+        /**
+         * Debugger hook. Only the value on the evaluation's base frame is consulted
+         * (one field read per evaluated node, no lookup). Set it on the bindings
+         * frame passed to {@link Jsonata#evaluate(Object, Frame)}; it is copied to
+         * the execution frame. null = no debugger attached.
+         */
+        public com.dashjoin.jsonata.debug.DebugHook debugHook;
+
+        public void setDebugHook(com.dashjoin.jsonata.debug.DebugHook hook) { this.debugHook = hook; }
+
+        /** enclosing frame (scope chain), null for the outermost frame */
+        public Frame getParent() { return parent; }
+
+        /** read-only view of the bindings defined directly in this frame */
+        public Map<String, Object> getLocalBindings() { return java.util.Collections.unmodifiableMap(bindings); }
+
+        /** the base (execution) frame of the running evaluation, may be null outside an evaluation */
+        public Frame getBase() { return base; }
+
         // Guardrails extensions
         public Options options;
 
@@ -173,6 +193,34 @@ public class Jsonata {
     }
 
     Object _evaluate(Symbol expr, Object input, Frame environment) {
+        // debug-api: single field read; the debugger path is kept out of line
+        final com.dashjoin.jsonata.debug.DebugHook hook = environment.base.debugHook;
+        if (hook != null)
+            return _evaluateDebug(hook, expr, input, environment);
+        return _evaluate0(expr, input, environment);
+    }
+
+    /**
+     * debug-api: evaluation of one node with debugger notifications.
+     * enter: before the node is evaluated (breakpoints / stepping may block here),
+     * exit: after evaluation incl. predicates, group-by and sequence mangling,
+     * error: the node's evaluation threw (reported at every level while unwinding;
+     * the innermost report comes first).
+     */
+    Object _evaluateDebug(com.dashjoin.jsonata.debug.DebugHook hook, Symbol expr, Object input, Frame environment) {
+        hook.enter(expr, input, environment);
+        Object result;
+        try {
+            result = _evaluate0(expr, input, environment);
+        } catch (RuntimeException | Error e) {
+            hook.error(expr, input, environment, e);
+            throw e;
+        }
+        hook.exit(expr, input, environment, result);
+        return result;
+    }
+
+    Object _evaluate0(Symbol expr, Object input, Frame environment) {
         Object result = null;
 
         // Store the current input + environment
@@ -2714,6 +2762,8 @@ public class Jsonata {
         // Porting JS to Java note: guardrails function is in Java class Frame
         exec_env.base = exec_env;
         exec_env.depth = 0;
+        // debug-api: attach (or detach) the debugger for this evaluation
+        exec_env.debugHook = bindings != null ? bindings.debugHook : null;
 
         if (validateInput)
             Functions.validateInput(input);
@@ -2756,6 +2806,11 @@ public class Jsonata {
 
     public List<Exception> getErrors() {
         return errors;
+    }
+
+    /** debug-api: the processed AST (root node) of this expression */
+    public Symbol getAst() {
+        return ast;
     }
 
     final static ThreadLocal<Parser> _parser = new ThreadLocal<>();

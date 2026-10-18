@@ -104,6 +104,13 @@ public class Parser implements Serializable {
 
         int position;
 
+        // debug-api: source range of this node, [start, end) as character offsets
+        // into the expression source; -1 if unknown (synthetic node).
+        // Unlike 'position' (jsonata-js semantics: offset AFTER the operator token,
+        // used in error messages and left untouched), these cover the whole subexpression.
+        int start = -1;
+        int end = -1;
+
         boolean keepArray; // [
 
         boolean descending; // ^
@@ -224,6 +231,39 @@ public class Parser implements Serializable {
         @Override public String toString() {
             return this.getClass().getSimpleName()+" "+id+" value="+value;
         }
+
+        // debug-api: read-only accessors (see com.dashjoin.jsonata.debug)
+        public String getType() { return type; }
+        public Object getValue() { return value; }
+        /** jsonata-js 'position': offset after the (operator) token; used in error messages */
+        public int getPosition() { return position; }
+        /** start offset (inclusive) of the source range covered by this node, -1 if unknown */
+        public int getStart() { return start; }
+        /** end offset (exclusive) of the source range covered by this node, -1 if unknown */
+        public int getEnd() { return end; }
+    }
+
+    // debug-api: range helpers
+    // offset just after the last token consumed by advance()
+    int lastConsumedEnd = 0;
+
+    static void setRange(Symbol s, int start, int end) {
+        if (s != null) { s.start = start; s.end = end; }
+    }
+
+    /** widen the range of 'target' so that it also covers the range of 'other' */
+    static void widenRange(Symbol target, Symbol other) {
+        if (target == null || other == null || other.start < 0) return;
+        if (target.start < 0 || other.start < target.start) target.start = other.start;
+        if (other.end > target.end) target.end = other.end;
+    }
+
+    static void extendEnd(Symbol target, int end) {
+        if (target != null && target.start >= 0 && end > target.end) target.end = end;
+    }
+
+    static void copyRange(Symbol target, Symbol other) {
+        if (target != null && other != null) { target.start = other.start; target.end = other.end; }
     }
 
     void register(Symbol t) {
@@ -280,11 +320,13 @@ public class Parser implements Serializable {
                 );
                 return handleError(err);
             }
+            if (node != null && node.end >= 0) lastConsumedEnd = node.end; // debug-api
             Token next_token = lexer.next(infix);
             if (dbg) System.out.println("nextToken "+(next_token!=null ? next_token.type : null));
             if (next_token == null) {
                 node = symbolTable.get("(end)");
                 node.position = source.length();
+                setRange(node, source.length(), source.length()); // debug-api
                 return node;
             }
             Object value = next_token.value;
@@ -322,6 +364,7 @@ public class Parser implements Serializable {
             node.value = value;
             node.type = type;
             node.position = next_token.position;
+            setRange(node, next_token.start, next_token.position); // debug-api
             if (dbg) System.out.println("advance "+node);
             return node;
         }
@@ -330,13 +373,16 @@ public class Parser implements Serializable {
         Symbol expression(int rbp) {
             Symbol left;
             Symbol t = node;
+            final int rangeStart = t.start; // debug-api: every (sub)expression spans from its first to its last token
             advance(null, true);
             left = t.nud();
+            setRange(left, rangeStart, lastConsumedEnd); // debug-api
             while (rbp < node.lbp) {
                 t = node;
                 advance(null, false);
                 if (dbg) System.out.println("t="+t+", left="+left.type);
                 left = t.led(left);
+                setRange(left, rangeStart, lastConsumedEnd); // debug-api
             }
             return left;
         };
@@ -507,6 +553,7 @@ public class Parser implements Serializable {
                     Symbol p = new Symbol();
                     c.procedure = p; p.type = "variable"; p.value = "exists";
                     c.arguments = List.of(Parser.clone(left));
+                    copyRange(c, left); // debug-api: synthetic $exists(lhs) spans lhs, its procedure has no range
                 }
                 this.then = left;
                 this._else = expression(0);
@@ -650,6 +697,7 @@ public class Parser implements Serializable {
                             range.type = "binary"; range.value = ".."; range.position = node.position; range.lhs = item;
                             advance("..");
                             range.rhs = expression(0);
+                            setRange(range, item.start, range.rhs.end); // debug-api
                             item = range;
                         }
                         a.add(item);
@@ -852,6 +900,7 @@ public class Parser implements Serializable {
         Symbol result;
         if (expr.type.equals("function") && expr.predicate==null) {
             var thunk = new Symbol(); thunk.type = "lambda"; thunk.thunk = true; thunk.arguments = List.of(); thunk.position = expr.position;
+            copyRange(thunk, expr); // debug-api
             thunk.body = expr;
             result = thunk;
         } else if (expr.type.equals("condition")) {
@@ -979,6 +1028,15 @@ public class Parser implements Serializable {
     // converting them to arrays of steps which in turn may contain arrays of predicates.
     // following this, nodes containing '.' and '[' should be eliminated from the AST.
     Symbol processAST(Symbol expr) {
+        Symbol result = processAST0(expr);
+        // debug-api: the processed node covers (at least) the source range of the parse node.
+        // Nodes reused from a child (e.g. a path extended by a '.' step, a step with a
+        // predicate) are widened; freshly created nodes simply inherit the range.
+        if (result != null && result != expr) widenRange(result, expr);
+        return result;
+    }
+
+    Symbol processAST0(Symbol expr) {
         Symbol result = expr;
         if (expr==null) return null;
         if (dbg) System.out.println(" > processAST type="+expr.type+" value='"+expr.value+"'");
@@ -1099,6 +1157,8 @@ public class Parser implements Serializable {
                             }
                             Symbol s = new Symbol();
                             s.type = "filter"; s.expr = predicate; s.position = expr.position;
+                            setRange(s, expr.position - 1, expr.end); // debug-api: '[' ... ']'
+                            if (type.equals("stages")) extendEnd(step, s.end); // debug-api: step covers its stages
 
                             // FIXED:
                             // this logic is required in Java to fix
@@ -1130,6 +1190,8 @@ public class Parser implements Serializable {
                                     return new Symbol[] {processAST(pair[0]), processAST(pair[1])};
                                 }).collect(Collectors.toList());
                             result.group.position = expr.position;
+                            // debug-api: '{' ... '}' (the infix '{' node carries no position)
+                            setRange(result.group, expr.lhs != null && expr.lhs.end >= 0 ? source.indexOf('{', expr.lhs.end) : -1, expr.end);
                         break;
                     
                     case "^":
@@ -1143,6 +1205,7 @@ public class Parser implements Serializable {
                             result = _res;
                         }
                         var sortStep = new Symbol(); sortStep.type = "sort"; sortStep.position = expr.position;                        
+                        setRange(sortStep, expr.position - 1, expr.end); // debug-api: '^(' ... ')'
                         sortStep.terms = expr.rhsTerms.stream().map(terms -> {
                             Symbol expression = processAST(terms.expression);
                             pushAncestry(sortStep, expression);
@@ -1187,6 +1250,7 @@ public class Parser implements Serializable {
                         }
                         step.focus = expr.rhs.value;
                         step.tuple = true;
+                        if (step != result) extendEnd(step, expr.end); // debug-api: step covers '@$var'
                         break;
                     case "#":
                         result = processAST(expr.lhs);
@@ -1207,9 +1271,11 @@ public class Parser implements Serializable {
                         } else {
                             Symbol _res = new Symbol();
                             _res.type = "index"; _res.value = expr.rhs.value; _res.position = expr.position;
+                            setRange(_res, expr.position - 1, expr.end); // debug-api: '#$var'
                             step.stages.add(_res);
                         }
                         step.tuple = true;
+                        extendEnd(step, expr.end); // debug-api: step covers '#$var'
                         break;
                     case "~>":
                         result = new Symbol(); result.type = "apply"; result.value = expr.value; result.position = expr.position;
