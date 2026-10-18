@@ -104,6 +104,7 @@
 {"id":"DT-04#2","tags":["div","div:DT-04"],"expr":"$fromMillis(0, '[Y]', 'Z')"}
 {"id":"DT-04#3","tags":["div","div:DT-04"],"expr":"$fromMillis(0, '[H]', '+01:00')"}
 {"id":"DT-05#1","tags":["div","div:DT-05"],"expr":"$fromMillis(0, '[H01]:[m01] [Z]', '-0530')"}
+{"id":"DT-06#1","tags":["div","div:DT-06"],"expr":"$toMillis('2018-05-22T10:00:00-0130', '[Y]-[M]-[D]T[H]:[m]:[s][Z0101]')"}
 {"id":"ORD-01#1","tags":["div","div:ORD-01"],"expr":"{'b':1,'2':2,'1':3}"}
 {"id":"ORD-01#2","tags":["div","div:ORD-01"],"expr":"$keys({'b':1,'2':2,'1':3})"}
 {"id":"ORD-01#3","tags":["div","div:ORD-01"],"expr":"items{k: n}","input":{"items":[{"k":"b","n":1},{"k":"2","n":2},{"k":"1","n":3}]}}
