@@ -381,6 +381,10 @@ public class Utils {
         if (aa instanceof String)
             return ((Comparable)aa).compareTo(bb);
         else
-            return Double.compare(((Number)aa).doubleValue(), ((Number)bb).doubleValue());
+        {
+            // like JS < and >: numbers of any Java type by value, -0 equals 0
+            double a = ((Number)aa).doubleValue(), b = ((Number)bb).doubleValue();
+            return a < b ? -1 : (a > b ? 1 : 0);
+        }
     }
 }

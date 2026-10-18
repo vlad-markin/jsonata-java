@@ -1951,7 +1951,7 @@ public class Functions {
      * @param {*} comparator - comparator function
      * @returns {Array} - sorted array
      */
-    public static List sort(List arr, Object comparator) {
+    public static List sort(List arr, Object comparator) throws Throwable {
         // undefined inputs always return undefined
         if (arr == null) {
             return null;
@@ -1961,39 +1961,53 @@ public class Functions {
             return arr;
         }
 
-        List result = new ArrayList<>(arr);
-
-        if (comparator != null) {
-            Comparator comp = new Comparator() {
-
-                @Override
-                public int compare(Object o1, Object o2) {
-                    try {
-                        Boolean swap = toBoolean(funcApply(comparator, Arrays.asList(o1, o2)));
-                        // Symmetry/equality: if Jsonata comp(o1,o2)==comp(o2,o1) means Java o1==o2 (return 0)
-                        Boolean swapSym = toBoolean(funcApply(comparator, Arrays.asList(o2, o1)));
-                        if (swap != null && swap.equals(swapSym))
-                          return 0;
-                        if (swap == null)
-                          return 0;
-                        if (swap)
-                          return 1;
-                        else
-                          return -1;
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-                
+        // Same algorithm as jsonata-js (top-down merge sort, "swap if comparator returns true"),
+        // so that the result is identical even for comparators that are not a strict order
+        // (e.g. $l >= $r) and errors are raised for the same pair of values.
+        SwapFunction swap;
+        if (comparator == null) {
+            // inject a default comparator - only works for numeric or string arrays
+            if (!Utils.isArrayOfNumbers(arr) && !Utils.isArrayOfStrings(arr)) {
+                throw new JException("D3070", -1);
+            }
+            swap = (a, b) -> {
+                if (a instanceof Number)
+                    return ((Number) a).doubleValue() > ((Number) b).doubleValue();
+                return ((String) a).compareTo((String) b) > 0;
             };
-            if (comparator instanceof Comparator)
-              result.sort((Comparator)comparator);
-            else
-              result.sort((Comparator)comp);
+        } else if (comparator instanceof Comparator) {
+            // internal usage (order-by syntax): swap only if comp equals 1
+            Comparator c = (Comparator) comparator;
+            swap = (a, b) -> c.compare(a, b) > 0;
         } else {
-            result.sort(null);
+            swap = (a, b) -> Boolean.TRUE.equals(toBoolean(funcApply(comparator, Arrays.asList(a, b))));
         }
+        return msort(new ArrayList<>(arr), swap);
+    }
 
+    interface SwapFunction {
+        boolean swap(Object left, Object right) throws Throwable;
+    }
+
+    static List msort(List array, SwapFunction swap) throws Throwable {
+        if (array.size() <= 1)
+            return array;
+        int middle = array.size() / 2;
+        List left = msort(new ArrayList<>(array.subList(0, middle)), swap);
+        List right = msort(new ArrayList<>(array.subList(middle, array.size())), swap);
+        List result = new ArrayList<>(array.size());
+        int i = 0, j = 0;
+        while (i < left.size() && j < right.size()) {
+            if (swap.swap(left.get(i), right.get(j))) {
+                // if it returns true - swap left and right
+                result.add(right.get(j++));
+            } else {
+                // otherwise keep the same order
+                result.add(left.get(i++));
+            }
+        }
+        while (i < left.size()) result.add(left.get(i++));
+        while (j < right.size()) result.add(right.get(j++));
         return result;
     }
 

@@ -1438,10 +1438,11 @@ public class Jsonata {
                         bb
                     );
                 }
-                if(aa.equals(bb)) {
+                int c = Utils.compareTo(aa, bb);
+                if(c == 0) {
                     // both the same - move on to next term
                     continue;
-                } else if (Utils.compareTo(aa, bb)<0) {
+                } else if (c < 0) {
                     comp = -1;
                 } else {
                     comp = 1;
@@ -1463,7 +1464,13 @@ public class Jsonata {
         //  // the `focus` is passed in as the `this` for the invoked function
         //  result = /* await */ fn.sort.apply(focus, [lhs, comparator]);
  
-        result = Functions.sort(lhs, comparator);
+        try {
+            result = Functions.sort(lhs, comparator);
+        } catch (RuntimeException | Error e) {
+            throw e;
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
         return result;        
     }
  

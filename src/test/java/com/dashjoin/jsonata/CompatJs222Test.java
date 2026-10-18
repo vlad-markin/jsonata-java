@@ -84,4 +84,50 @@ public class CompatJs222Test {
         in.put("a", List.of(Map.of("b", 1), Map.of("b", 1)));
         assertEquals(1, jsonata("$distinct(a.b)").evaluate(in));
     }
+
+    /** SORT-01: default $sort on mixed Integer/Double values, D3070 instead of ClassCastException. */
+    @Test
+    public void sort01_defaultComparator() {
+        assertEquals(List.of(0.5, 2), jsonata("[2, 0.5] ~> $sort").evaluate(null));
+        Map<String, Object> in = new LinkedHashMap<>();
+        in.put("n", List.of(3L, 1.5, 2));
+        assertEquals(List.of(1.5, 2, 3L), jsonata("$sort(n)").evaluate(in));
+        JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("$sort([{'a':1},{'a':2}])").evaluate(null));
+        assertEquals("D3070", e.getError());
+        e = org.junit.jupiter.api.Assertions.assertThrows(JException.class, () -> jsonata("$sort([1,'a'])").evaluate(null));
+        assertEquals("D3070", e.getError());
+    }
+
+    /** SORT-02: same merge sort as jsonata-js, also for non-strict comparators. */
+    @Test
+    public void sort02_mergeSortLikeJs() {
+        assertEquals(List.of(2, 1, 3), jsonata("$sort([3,1,2], function($l,$r){true})").evaluate(null));
+        assertEquals(List.of("f", "d", "b", "c", "a", "e"), jsonata(
+                "$sort([{'k':2,'n':'a'},{'k':1,'n':'b'},{'k':2,'n':'c'},{'k':1,'n':'d'},{'k':3,'n':'e'},{'k':1,'n':'f'}], function($l,$r){$l.k >= $r.k}).n")
+                .evaluate(null));
+        // stable for strict comparators
+        assertEquals(List.of("b", "d", "a", "c"), jsonata(
+                "$sort([{'k':2,'n':'a'},{'k':1,'n':'b'},{'k':2,'n':'c'},{'k':1,'n':'d'}], function($l,$r){$l.k > $r.k}).n")
+                .evaluate(null));
+    }
+
+    /** SORT-03: order-by raises the error for the same pair of values as jsonata-js. */
+    @Test
+    public void sort03_orderByErrorCode() {
+        JException e = org.junit.jupiter.api.Assertions.assertThrows(JException.class,
+                () -> jsonata("items^(k)").evaluate(Map.of("items", List.of(Map.of("k", 1), Map.of("k", "9"),
+                        mapOfNull("k"), Map.of("k", "10"), Map.of("k", 2), Map.of("n", "nok")))));
+        assertEquals("T2008", e.getError());
+        // equal numbers of different Java types are equal for order-by (stable)
+        Map<String, Object> in = new LinkedHashMap<>();
+        in.put("items", List.of(Map.of("k", 1L, "n", "a"), Map.of("k", 1.0, "n", "b"), Map.of("k", 1, "n", "c")));
+        assertEquals(List.of("a", "b", "c"), jsonata("items^(k).n").evaluate(in));
+    }
+
+    static Map<String, Object> mapOfNull(String key) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put(key, null);
+        return m;
+    }
 }
