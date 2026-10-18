@@ -2,3 +2,5 @@ node_modules/
 jvm/target/
 out/
 *.log
+bench/data/
+bench/jvm/target/

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>compat-eval</groupId>
+  <artifactId>compat-eval-bench</artifactId>
+  <version>0.1.0</version>
+  <description>Phase 5: benchmark harness and evaluation-control probes. Compiles the engine directly
+    from ../../../src/main/java (working tree) plus the JSON helper from ../../jvm.</description>
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <id>engine-sources</id>
+            <phase>generate-sources</phase>
+            <goals><goal>add-source</goal></goals>
+            <configuration>
+              <sources>
+                <source>${engine.src}</source>
+                <source>../../jvm/src/main/java</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.14.1</version>
+        <configuration>
+          <excludes><exclude>**/module-info.java</exclude></excludes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+  <profiles>
+    <profile>
+      <!-- default: the working-tree engine; override with -Dengine.src=... to bench a patched copy -->
+      <id>default-engine</id>
+      <activation><property><name>!engine.src</name></property></activation>
+      <properties><engine.src>../../../src/main/java</engine.src></properties>
+    </profile>
+  </profiles>
+</project>
