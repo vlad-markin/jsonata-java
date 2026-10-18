@@ -2684,16 +2684,14 @@ public class Jsonata {
             throw new JException("S0500", 0);
         }
 
-        Frame exec_env;
+        // Always evaluate in a fresh frame (jsonata-js 2.2.2, df63a7c): otherwise top-level
+        // assignments, $$ and guardrail counters are shared between evaluations and threads.
+        Frame exec_env = createFrame(environment);
         if (bindings != null) {
-            //var exec_env;
-            // the variable bindings have been passed in - create a frame to hold these
-            exec_env = createFrame(environment);
+            // the variable bindings have been passed in - add them to the frame
             for (var v : bindings.bindings.keySet()) {
                 exec_env.bind(v, bindings.lookup(v));
             }
-        } else {
-            exec_env = environment;
         }
         // put the input document into the environment as the root object
         exec_env.bind("$", input);
