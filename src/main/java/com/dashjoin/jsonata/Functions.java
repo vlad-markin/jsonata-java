@@ -1749,7 +1749,9 @@ public class Functions {
         var result = createSequence();
 
         for (var key : obj.keySet()) {
-            var func_args = hofFuncArgs(func, obj.get(key), key, obj);
+            // a Java null inside a host map is JSON null (like in $sift / paths)
+            Object value = obj.get(key);
+            var func_args = hofFuncArgs(func, value == null ? Jsonata.NULL_VALUE : value, key, obj);
             // invoke func
             var val = funcApply(func, func_args);
             if(val != null) {

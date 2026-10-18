@@ -638,4 +638,15 @@ public class CompatJs222Test {
         assertEquals("D1001", err("$string({'a': 1/0})"));
         assertEquals("D1001", err("1/0 + 1"));
     }
+
+    /** UND-01: $each passes JSON null values of a host map (Java null) to the function. */
+    @Test
+    public void und01_eachNullValue() {
+        Jsonata e = jsonata("$each(obj, function($v){$v})");
+        e.setOutputConvertNulls(false);
+        Map<String, Object> obj = new LinkedHashMap<>();
+        obj.put("a", null);
+        obj.put("b", 1);
+        assertEquals(List.of(Jsonata.NULL_VALUE, 1), e.evaluate(Map.of("obj", obj)));
+    }
 }
