@@ -1,0 +1,110 @@
+{"id": "ext-sig-upper", "expr": "$hu(name)", "tags": ["ext"], "input": {"name": "abc"}, "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-upper-ctx", "expr": "name.$hu()", "tags": ["ext"], "input": {"name": "abc"}, "functions": [{"name": "hu", "impl": "upper", "signature": "<s-:s>"}]}
+{"id": "ext-sig-upper-badarg", "expr": "$hu(1)", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-upper-null", "expr": "$hu(null)", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-upper-undef", "expr": "$hu(nothing)", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-upper-array", "expr": "$hu(['a','b'])", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-too-many", "expr": "$hu('a','b')", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-sig-optional", "expr": "$ac()", "tags": ["ext"], "functions": [{"name": "ac", "impl": "argCount", "signature": "<s?:n>"}]}
+{"id": "ext-sig-optional2", "expr": "$ac('x')", "tags": ["ext"], "functions": [{"name": "ac", "impl": "argCount", "signature": "<s?:n>"}]}
+{"id": "ext-sig-varargs", "expr": "$at(1,2,3)", "tags": ["ext"], "functions": [{"name": "at", "impl": "argTypes", "signature": "<n+:a>"}]}
+{"id": "ext-sig-array-coerce", "expr": "$at(1)", "tags": ["ext"], "functions": [{"name": "at", "impl": "argTypes", "signature": "<a<n>:a>"}]}
+{"id": "ext-sig-array-coerce2", "expr": "$hecho(5)", "tags": ["ext"], "functions": [{"name": "hecho", "impl": "echo", "signature": "<a<n>:a>"}]}
+{"id": "ext-sig-any", "expr": "$at(null, [1], {'a':1}, true, 'x', 1.5)", "tags": ["ext"], "functions": [{"name": "at", "impl": "argTypes", "signature": "<jjjjjj:a>"}]}
+{"id": "ext-sig-number-types", "expr": "$at(1, 1.5, -0, 1e300)", "tags": ["ext"], "functions": [{"name": "at", "impl": "argTypes", "signature": "<nnnn:a>"}]}
+{"id": "ext-sig-function-arg", "expr": "$ap(function($x){$x*2}, 21)", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply", "signature": "<fn:n>"}]}
+{"id": "ext-sig-object", "expr": "$hecho({'b':1,'a':2})", "tags": ["ext"], "functions": [{"name": "hecho", "impl": "echo", "signature": "<o:o>"}]}
+{"id": "ext-sig-x", "expr": "$typ(function(){1})", "tags": ["ext"], "functions": [{"name": "typ", "impl": "typeOf", "signature": "<x:s>"}]}
+{"id": "ext-nosig-typeof-null", "expr": "$typ(null)", "tags": ["ext"], "functions": [{"name": "typ", "impl": "typeOf"}]}
+{"id": "ext-nosig-typeof-undef", "expr": "$typ(nothing)", "tags": ["ext"], "functions": [{"name": "typ", "impl": "typeOf"}]}
+{"id": "ext-nosig-typeof-seq", "expr": "$typ(a.b)", "tags": ["ext"], "input": {"a": [{"b": 1}, {"b": 2}]}, "functions": [{"name": "typ", "impl": "typeOf"}]}
+{"id": "ext-nosig-typeof-single", "expr": "$typ(a.b)", "tags": ["ext"], "input": {"a": [{"b": 1}]}, "functions": [{"name": "typ", "impl": "typeOf"}]}
+{"id": "ext-nosig-argtypes-mixed", "expr": "$at(a, nothing, null, [])", "tags": ["ext"], "input": {"a": 1}, "functions": [{"name": "at", "impl": "argTypes"}]}
+{"id": "ext-nosig-echo-roundtrip", "expr": "$hecho($)", "tags": ["ext"], "input": {"z": 1, "a": [1, 2.5, null, "x"], "m": {"10": 1, "2": 2}}, "functions": [{"name": "hecho", "impl": "echo"}]}
+{"id": "ext-host-returns-object", "expr": "$mk()", "tags": ["ext"], "functions": [{"name": "mk", "impl": "makeObject"}]}
+{"id": "ext-host-returns-object-path", "expr": "$mk().z", "tags": ["ext"], "functions": [{"name": "mk", "impl": "makeObject"}]}
+{"id": "ext-host-returns-null", "expr": "$hecho(null) = null", "tags": ["ext"], "functions": [{"name": "hecho", "impl": "echo"}]}
+{"id": "ext-host-error", "expr": "$boom('bad')", "tags": ["ext"], "functions": [{"name": "boom", "impl": "throwError", "signature": "<s:s>"}]}
+{"id": "ext-host-error-in-map", "expr": "$map([1,2], function($v){$boom('bad')})", "tags": ["ext"], "functions": [{"name": "boom", "impl": "throwError"}]}
+{"id": "ext-host-context-input", "expr": "a.$ci()", "tags": ["ext"], "input": {"a": {"x": 1}}, "functions": [{"name": "ci", "impl": "contextInput"}]}
+{"id": "ext-async-echo", "expr": "$ae(41) + 1", "tags": ["ext"], "functions": [{"name": "ae", "impl": "asyncEcho", "signature": "<n:n>"}]}
+{"id": "ext-async-in-map", "expr": "$map([1,2,3], function($v){$ae($v)*10})", "tags": ["ext"], "functions": [{"name": "ae", "impl": "asyncEcho"}]}
+{"id": "ext-async-upper-path", "expr": "items.$au(name)", "tags": ["ext"], "input": {"items": [{"name": "a"}, {"name": "b"}]}, "functions": [{"name": "au", "impl": "asyncUpper", "signature": "<s:s>"}]}
+{"id": "ext-async-in-filter", "expr": "items[$ae(v) > 1].name", "tags": ["ext"], "input": {"items": [{"name": "a", "v": 1}, {"name": "b", "v": 2}]}, "functions": [{"name": "ae", "impl": "asyncEcho"}]}
+{"id": "ext-async-sort-comparator", "expr": "$sort([3,1,2], function($a,$b){$ae($a) > $ae($b)})", "tags": ["ext"], "functions": [{"name": "ae", "impl": "asyncEcho"}]}
+{"id": "ext-lambda-to-host", "expr": "$ap(function($x){$x & '!'}, 'hi')", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-lambda-closure-to-host", "expr": "($k := 10; $ap(function($x){$x + $k}, 1))", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-lambda-to-host-mapall", "expr": "$ma(function($x){$x * $x}, [1,2,3])", "tags": ["ext"], "functions": [{"name": "ma", "impl": "mapAll"}]}
+{"id": "ext-lambda-to-host-2args", "expr": "$ap2(function($a,$b){$a - $b}, 10, 3)", "tags": ["ext"], "functions": [{"name": "ap2", "impl": "apply2"}]}
+{"id": "ext-native-to-host", "expr": "$ap($uppercase, 'abc')", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-partial-to-host", "expr": "$ap($substring(?, 1), 'abc')", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-partial-native-to-host", "expr": "$ap($ap(?, 'x'), function($s){$s & $s})", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-hof-host-as-arg", "expr": "$map(['a','b'], $hu)", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-hof-host-nosig-as-arg", "expr": "$map(['a','b'], $hecho)", "tags": ["ext"], "functions": [{"name": "hecho", "impl": "echo"}]}
+{"id": "ext-hof-host-in-sort", "expr": "$sort([3,1,2], $cmp)", "tags": ["ext"], "bindings": {"cmp": {"$expr": "function($a,$b){$a>$b}"}}}
+{"id": "ext-host-lambda-error", "expr": "$ap(function($x){$x.y.z()}, 1)", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-lambda-to-host-sig", "expr": "$ap(function($x)<n:n>{$x*2}, 'a')", "tags": ["ext"], "functions": [{"name": "ap", "impl": "apply"}]}
+{"id": "ext-chain-host", "expr": "'abc' ~> $hu", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-chain-host-nosig", "expr": "'abc' ~> $hecho", "tags": ["ext"], "functions": [{"name": "hecho", "impl": "echo"}]}
+{"id": "ext-bind-host", "expr": "$f('x')", "tags": ["ext"], "bindings": {"f": {"$host": "upper"}}}
+{"id": "ext-bind-host-ctx", "expr": "'x'.$f()", "tags": ["ext"], "bindings": {"f": {"$host": "upper"}}}
+{"id": "ext-bind-host-ctx2", "expr": "name.$f()", "tags": ["ext"], "input": {"name": "q"}, "bindings": {"f": {"$host": "echo"}}}
+{"id": "ext-bind-jsonata-fn", "expr": "$double(21)", "tags": ["ext"], "bindings": {"double": {"$expr": "function($x){$x*2}"}}}
+{"id": "ext-bind-jsonata-fn-sig", "expr": "$double('a')", "tags": ["ext"], "bindings": {"double": {"$expr": "function($x)<n:n>{$x*2}"}}}
+{"id": "ext-bind-jsonata-closure", "expr": "$add5(1)", "tags": ["ext"], "bindings": {"add5": {"$expr": "($k := 5; function($x){$x+$k})"}}}
+{"id": "ext-bind-jsonata-fn-uses-root", "expr": "$f()", "tags": ["ext"], "input": {"a": 1}, "bindings": {"f": {"$expr": "function(){$$}"}}}
+{"id": "ext-bind-jsonata-fn-uses-ctx", "expr": "a.$f()", "tags": ["ext"], "input": {"a": {"b": 2}}, "bindings": {"f": {"$expr": "function(){$.b}"}}}
+{"id": "ext-bind-jsonata-partial", "expr": "$p('abcdef')", "tags": ["ext"], "bindings": {"p": {"$expr": "$substring(?, 2, 2)"}}}
+{"id": "ext-bind-jsonata-recursive", "expr": "$fact(10)", "tags": ["ext"], "bindings": {"fact": {"$expr": "function($n){$n<=1 ? 1 : $n * $fact($n-1)}"}}}
+{"id": "ext-bind-jsonata-recursive-self", "expr": "$fact(10)", "tags": ["ext"], "bindings": {"fact": {"$expr": "($fact := function($n){$n<=1 ? 1 : $n * $fact($n-1)}; $fact)"}}}
+{"id": "ext-bind-jsonata-hof", "expr": "$map([1,2], $sq)", "tags": ["ext"], "bindings": {"sq": {"$expr": "function($x){$x*$x}"}}}
+{"id": "ext-bind-regex", "expr": "$match('abc', $re)", "tags": ["ext"], "bindings": {"re": {"$expr": "/b/"}}}
+{"id": "ext-bind-regex-contains", "expr": "$contains('abc', $re)", "tags": ["ext"], "bindings": {"re": {"$expr": "/B/i"}}}
+{"id": "ext-bind-vars", "expr": "$a + $b", "tags": ["ext"], "bindings": {"a": 1, "b": 2.5}}
+{"id": "ext-bind-null", "expr": "$n = null", "tags": ["ext"], "bindings": {"n": null}}
+{"id": "ext-bind-null-exists", "expr": "$exists($n)", "tags": ["ext"], "bindings": {"n": null}}
+{"id": "ext-bind-undefined", "expr": "$exists($u)", "tags": ["ext"], "bindings": {"u": {"$undefined": true}}}
+{"id": "ext-bind-array", "expr": "$arr[1]", "tags": ["ext"], "bindings": {"arr": [1, 2, 3]}}
+{"id": "ext-bind-array-single", "expr": "$arr", "tags": ["ext"], "bindings": {"arr": [1]}}
+{"id": "ext-bind-object-order", "expr": "$o", "tags": ["ext"], "bindings": {"o": {"b": 1, "a": 2, "10": 3}}}
+{"id": "ext-bind-shadow-builtin", "expr": "$sum([1,2])", "tags": ["ext"], "bindings": {"sum": {"$expr": "function($x){'mine'}"}}}
+{"id": "ext-bind-shadow-input", "expr": "$", "tags": ["ext"], "input": {"a": 1}, "bindings": {"$": 5}}
+{"id": "ext-bind-overrides-var", "expr": "($x := 1; $x)", "tags": ["ext"], "bindings": {"x": 99}}
+{"id": "ext-bind-dollar-dollar", "expr": "$$", "tags": ["ext"], "input": {"a": 1}, "bindings": {"a": 2}}
+{"id": "ext-bind-string-key-weird", "expr": "$lookup($o, 'x y')", "tags": ["ext"], "bindings": {"o": {"x y": 1}}}
+{"id": "ext-bind-nested-null", "expr": "$o.a = null", "tags": ["ext"], "bindings": {"o": {"a": null}}}
+{"id": "ext-bind-large-int", "expr": "$big + 0", "tags": ["ext"], "bindings": {"big": 9007199254740993}}
+{"id": "ext-bind-large-int-string", "expr": "$string($big)", "tags": ["ext"], "bindings": {"big": 9007199254740993}}
+{"id": "ext-input-large-int", "expr": "$string(n)", "tags": ["ext"], "input": {"n": 9007199254740993}}
+{"id": "ext-input-large-int-eq", "expr": "n = 9007199254740992", "tags": ["ext"], "input": {"n": 9007199254740993}}
+{"id": "ext-input-long-vs-literal", "expr": "n = 3", "tags": ["ext"], "input": {"n": 3}}
+{"id": "ext-input-deep-eq-array", "expr": "a = [1,2]", "tags": ["ext"], "input": {"a": [1, 2]}}
+{"id": "ext-input-deep-eq-array-double", "expr": "a = [1.5,2]", "tags": ["ext"], "input": {"a": [1.5, 2]}}
+{"id": "ext-input-deep-eq-object", "expr": "o = {'x': 1}", "tags": ["ext"], "input": {"o": {"x": 1}}}
+{"id": "ext-input-deep-eq-object2", "expr": "o = {'x': 1.0}", "tags": ["ext"], "input": {"o": {"x": 1}}}
+{"id": "ext-input-deep-ne", "expr": "a != [1,2]", "tags": ["ext"], "input": {"a": [1, 2]}}
+{"id": "ext-input-in-array", "expr": "3 in a", "tags": ["ext"], "input": {"a": [1, 2, 3]}}
+{"id": "ext-input-distinct-mixed", "expr": "$distinct([1, 1.0, n])", "tags": ["ext"], "input": {"n": 1}}
+{"id": "ext-input-null-top", "expr": "$ = null", "tags": ["ext"], "input": null}
+{"id": "ext-input-null-top-type", "expr": "$type($)", "tags": ["ext"], "input": null}
+{"id": "ext-input-undefined-top", "expr": "$type($)", "tags": ["ext"]}
+{"id": "ext-input-array-top", "expr": "$count($)", "tags": ["ext"], "input": [1, 2, 3]}
+{"id": "ext-input-array-top-single", "expr": "$", "tags": ["ext"], "input": [1]}
+{"id": "ext-input-array-top-path", "expr": "$[0]", "tags": ["ext"], "input": [[1, 2]]}
+{"id": "ext-input-array-of-one-obj", "expr": "a", "tags": ["ext"], "input": [{"a": 1}]}
+{"id": "ext-opt-sequence-limit", "expr": "[1..10]", "tags": ["ext"], "options": {"sequence": 5}}
+{"id": "ext-opt-sequence-ok", "expr": "[1..5]", "tags": ["ext"], "options": {"sequence": 5}}
+{"id": "ext-opt-timeout-only", "expr": "[1..5]", "tags": ["ext"], "options": {"timeout": 1000}}
+{"id": "ext-opt-stack-only", "expr": "[1..5]", "tags": ["ext"], "options": {"stack": 100}}
+{"id": "ext-opt-stack-exceeded", "expr": "($f := function($n){$n=0?0:1+$f($n-1)}; $f(50))", "tags": ["ext"], "options": {"stack": 20}}
+{"id": "ext-opt-timeout-exceeded", "expr": "($f := function($n){$n=0?0:$f($n-1)}; $f(100000000))", "tags": ["ext"], "options": {"timeout": 200}}
+{"id": "ext-opt-append-limit", "expr": "$append([1,2,3],[4,5,6])", "tags": ["ext"], "options": {"sequence": 5}}
+{"id": "ext-opt-wildcard-limit", "expr": "{'a':[1,2],'b':[3,4]}.*", "tags": ["ext"], "options": {"sequence": 3}}
+{"id": "ext-bounds-depth", "expr": "($f := function($n){$n=0?0:1+$f($n-1)}; $f(50))", "tags": ["ext"], "bounds": {"timelimit": 1000, "depth": 30}}
+{"id": "ext-bounds-time", "expr": "($f := function($n){$n=0?0:$f($n-1)}; $f(100000000))", "tags": ["ext"], "bounds": {"timelimit": 200, "depth": 1000000}}
+{"id": "ext-assign-isolation-1", "expr": "($y := ($exists($y) ? $y + 1 : 1); $y)", "tags": ["ext"]}
+{"id": "ext-eval-binding-scope", "expr": "($x := 5; $eval('$x'))", "tags": ["ext"]}
+{"id": "ext-eval-with-input", "expr": "$eval('a', {'a': 7})", "tags": ["ext"]}
+{"id": "ext-eval-defines-fn", "expr": "$eval('function($x){$x+1}')(1)", "tags": ["ext"]}
+{"id": "ext-eval-host", "expr": "$eval('$hu(\"a\")')", "tags": ["ext"], "functions": [{"name": "hu", "impl": "upper", "signature": "<s:s>"}]}
+{"id": "ext-eval-uses-binding", "expr": "$eval('$b * 2')", "tags": ["ext"], "bindings": {"b": 21}}

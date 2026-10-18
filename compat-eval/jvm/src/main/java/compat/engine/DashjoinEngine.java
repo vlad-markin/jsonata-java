@@ -96,7 +96,7 @@ public class DashjoinEngine implements Engine {
                 public Object callFunction(Object function, List<Object> fargs) throws Exception {
                     List<Object> eargs = new ArrayList<>();
                     for (Object a : fargs)
-                        eargs.add(toEngine(a, false));
+                        eargs.add(toEngine(a, true));
                     try {
                         return fromEngine(Functions.funcApply(toEngine(function, false), eargs));
                     } catch (Exception e) {
@@ -111,7 +111,8 @@ public class DashjoinEngine implements Engine {
                     return fromEngine(input);
                 }
             });
-            return toEngine(res, false);
+            // a host returning JSON null must hand NULL_VALUE to the engine (Java null = undefined)
+            return toEngine(res, true);
         };
     }
 
